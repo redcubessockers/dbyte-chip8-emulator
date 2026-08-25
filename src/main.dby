@@ -1,0 +1,138 @@
+fn encode(room: u32, inventory: u32, hp: u32, score: u32) -> u32:
+    return room + (inventory * 10) + (hp * 100) + (score * 1000)
+
+fn room_of(state: u32) -> u32:
+    return state - ((state / 10) * 10)
+
+fn inventory_of(state: u32) -> u32:
+    let tens = state / 10
+    return tens - ((tens / 10) * 10)
+
+fn hp_of(state: u32) -> u32:
+    let hundreds = state / 100
+    let score = state / 1000
+    return hundreds - (score * 10)
+
+fn score_of(state: u32) -> u32:
+    return state / 1000
+
+fn show_state(state: u32) -> u32:
+    print("[STATE] room:", room_of(state))
+    print("[STATE] inventory:", inventory_of(state))
+    print("[STATE] hp:", hp_of(state))
+    print("[STATE] score:", score_of(state))
+    return state
+
+fn step(state: u32, action: u32) -> Result[u32, u32]:
+    let room = room_of(state)
+    let inventory = inventory_of(state)
+    let hp = hp_of(state)
+    let score = score_of(state)
+
+    if action == 1:
+        if room == 0:
+            print("[LOOK] ENTRY VAULT: a brass lens rests under dead stars")
+        if room == 1:
+            print("[LOOK] ASH CORRIDOR: a pressure plate guards the north gate")
+        if room == 2:
+            print("[LOOK] GLYPH CATHEDRAL: three locks share one silent mechanism")
+        return Result[u32, u32].Ok(state)
+
+    if action == 2:
+        if room != 0:
+            return Result[u32, u32].Err(201)
+        if inventory != 0:
+            return Result[u32, u32].Err(202)
+        print("[TAKE] brass lens acquired")
+        return Result[u32, u32].Ok(encode(room, 1, hp, score + 5))
+
+    if action == 3:
+        if room == 0:
+            print("[MOVE] entry vault -> ash corridor")
+            return Result[u32, u32].Ok(encode(1, inventory, hp, score + 10))
+        if room == 1:
+            if inventory == 1:
+                print("[MOVE] ash corridor -> glyph cathedral")
+                return Result[u32, u32].Ok(encode(2, inventory, hp, score + 10))
+        return Result[u32, u32].Err(203)
+
+    if action == 4:
+        if room != 1:
+            return Result[u32, u32].Err(204)
+        if inventory == 0:
+            return Result[u32, u32].Err(205)
+        print("[ALIGN] lens frequency locked to the corridor gate")
+        return Result[u32, u32].Ok(encode(room, inventory, hp, score + 20))
+
+    if action == 5:
+        if room != 2:
+            return Result[u32, u32].Err(206)
+        if inventory == 0:
+            return Result[u32, u32].Err(207)
+        if hp == 0:
+            return Result[u32, u32].Err(208)
+        print("[SOLVE] three glyphs collapse into one executable seal")
+        return Result[u32, u32].Ok(encode(room, inventory, hp, score + 100))
+
+    if action == 6:
+        if room != 1:
+            return Result[u32, u32].Err(209)
+        if hp == 0:
+            return Result[u32, u32].Err(210)
+        print("[TRAP] pressure plate triggered; one heart lost")
+        return Result[u32, u32].Ok(encode(room, inventory, hp - 1, score - 3))
+
+    return Result[u32, u32].Err(404)
+
+fn advance(state: u32, action: u32) -> Result[u32, u32]:
+    let next = step(state, action)?
+    show_state(next)
+    return Result[u32, u32].Ok(next)
+
+fn choose[T](condition: bool, yes: T, no: T) -> T:
+    if condition:
+        return yes
+    return no
+
+fn play_campaign() -> Result[u32, u32]:
+    print("== BYTETEMPLE FORGE: THE EXECUTABLE SEAL ==")
+    print("A deterministic dungeon for DByte Hosted and VM")
+    let state: u32 = encode(0, 0, 3, 0)
+    defer [borrow state]:
+        print("[DEFER] campaign scope finalized")
+
+    print("-- TURN 01 / LOOK --")
+    let s1 = advance(state, 1)?
+    print("-- TURN 02 / TAKE --")
+    let s2 = advance(s1, 2)?
+    print("-- TURN 03 / MOVE --")
+    let s3 = advance(s2, 3)?
+    print("-- TURN 04 / TRAP --")
+    let s4 = advance(s3, 6)?
+    print("-- TURN 05 / ALIGN --")
+    let s5 = advance(s4, 4)?
+    print("-- TURN 06 / MOVE --")
+    let s6 = advance(s5, 3)?
+    print("-- TURN 07 / SOLVE --")
+    let s7 = advance(s6, 5)?
+
+    let bonus: u32 = choose[u32](score_of(s7) >= 100, 50, 0)
+    let final_score: u32 = score_of(s7) + bonus
+    print("[RELIC] executable seal accepted")
+    print("[SCORE] base:", score_of(s7))
+    print("[SCORE] flawless-route bonus:", bonus)
+    print("[SCORE] final:", final_score)
+    print("[REPLAY] LOOK > TAKE > MOVE > TRAP > ALIGN > MOVE > SOLVE")
+    return Result[u32, u32].Ok(final_score)
+
+fn report(result: Result[u32, u32]) -> int:
+    match result:
+        case Result.Ok(score):
+            print("[CAMPAIGN] completed with score:", score)
+            return 0
+        case Result.Err(error):
+            print("[CAMPAIGN] failed with error code:", error)
+            return 1
+
+let campaign = play_campaign()
+report(campaign)
