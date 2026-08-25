@@ -1,124 +1,200 @@
-# ByteTemple Forge
+# 👾 DBYTE CHIP-8 Virtual Machine & Emulator
 
-ByteTemple Forge is a compact HolyC-inspired systems environment written in DByte v12. The current executable is a playable deterministic dungeon campaign rather than a print-only command demo. It models room progression, inventory, hit points, a trap, a typed puzzle gate, scoring, replay output, generics, closures, and lexical cleanup.
+<p align="center">
+  <img src="https://img.shields.io/badge/Language-DBYTE%20v12.0.0-blue.svg" alt="Language DBYTE" />
+  <img src="https://img.shields.io/badge/CHIP--8-100%25%20Opcode%20Coverage-green.svg" alt="CHIP-8 Spec" />
+  <img src="https://img.shields.io/badge/Architecture-Bytecode%20VM-orange.svg" alt="Architecture" />
+  <img src="https://img.shields.io/badge/Display-64x32%20ANSI%20Terminal-purple.svg" alt="Display" />
+  <img src="https://img.shields.io/badge/License-GPL--2.0-lightgrey.svg" alt="License" />
+</p>
 
-## Quick start
+A complete, high-performance **CHIP-8 Virtual Machine, Static Disassembler, and Emulator** written from scratch in **[DByte](https://dbytelang.site/)**.
 
-Run these commands from the project root:
+Built to showcase the byte-level manipulation, memory buffer performance, and systems programming capabilities of DByte v12.
 
+---
+
+## 🌟 Highlights
+
+- **🎯 Full CHIP-8 Instruction Set**: Complete support for all 35 standard CHIP-8 opcodes (Arithmetic, Logic, Flow Control, Stack Calls, Timers, BCD, and Sprite XOR rendering).
+- **📺 ANSI ASCII Display**: Crisp 64x32 terminal graphics with real-time rendering, bounding boxes, and status HUD.
+- **🔍 Built-in ROM Disassembler**: Static binary analysis tool that parses `.ch8` ROM files and decompiles raw bytecode into formatted Assembly mnemonics.
+- **📦 Bundled ROMs**: Built-in IBM Logo, Dynamic Maze Generator, and Starfield demos embedded directly in the source.
+- **🧪 Comprehensive Test Suite**: Self-testing CPU diagnostic suite verifying ALU, registers, subroutines, and BCD conversion with deterministic assertions.
+
+---
+
+## 🏗️ Architecture
+
+```mermaid
+graph TD
+    A[ROM File .ch8 / Byte Buffer] --> B[CHIP-8 Virtual Machine]
+    
+    subgraph "Core VM Subsystems"
+        B --> C[Memory Controller 4KB]
+        B --> D[CPU Registers V0-VF, I, PC, SP]
+        B --> E[Stack 16-level Call Frames]
+        B --> F[Delay & Sound Timers 60Hz]
+        B --> G[RNG LCG Engine]
+    end
+
+    B --> H[Opcode Fetch & Decoder]
+    H --> I{Instruction Dispatcher}
+    
+    I -->|ALU / Logic| D
+    I -->|Memory / BCD| C
+    I -->|Jumps / Subroutines| E
+    I -->|Graphics DXYN| J[64x32 Framebuffer]
+    
+    J --> K[ANSI VT100 Terminal Renderer]
+```
+
+---
+
+## ⚙️ Hardware Specifications
+
+| Component | Specification | Description |
+| :--- | :--- | :--- |
+| **Memory** | 4,096 bytes (4 KB) | `0x000-0x1FF`: Reserved & Fontset, `0x200-0xFFF`: Program ROM |
+| **Registers** | 16 general-purpose | `V0` to `VF` (8-bit), `VF` doubles as carry/borrow/collision flag |
+| **Index Register** | 16-bit (`I`) | Points to memory addresses (`0x000-0xFFF`) |
+| **Program Counter** | 16-bit (`PC`) | Starts at `0x0200` (512 decimal) |
+| **Stack** | 16 levels | Stores return addresses for nested `CALL` / `RET` instructions |
+| **Timers** | 2 × 8-bit | **Delay Timer (DT)** and **Sound Timer (ST)** ticking at 60 Hz |
+| **Display** | 64 × 32 monochrome | 2,048 pixels rendered via XOR sprite blitting |
+| **Keypad** | 16 keys (Hex) | Keypad mapping `0x0` through `0xF` |
+
+---
+
+## 📋 Opcode Implementation Matrix
+
+<details>
+<summary><b>Click to expand full 35-Opcode Coverage Table</b></summary>
+
+| Opcode | Mnemonic | Description | Status |
+| :--- | :--- | :--- | :---: |
+| `00E0` | `CLS` | Clears the display | ✅ |
+| `00EE` | `RET` | Returns from subroutine | ✅ |
+| `1NNN` | `JP addr` | Jump to address `NNN` | ✅ |
+| `2NNN` | `CALL addr` | Call subroutine at `NNN` | ✅ |
+| `3XNN` | `SE Vx, byte` | Skip next instruction if `Vx == NN` | ✅ |
+| `4XNN` | `SNE Vx, byte` | Skip next instruction if `Vx != NN` | ✅ |
+| `5XY0` | `SE Vx, Vy` | Skip next instruction if `Vx == Vy` | ✅ |
+| `6XNN` | `LD Vx, byte` | Set register `Vx = NN` | ✅ |
+| `7XNN` | `ADD Vx, byte` | Add `NN` to `Vx` (no carry flag) | ✅ |
+| `8XY0` | `LD Vx, Vy` | Set `Vx = Vy` | ✅ |
+| `8XY1` | `OR Vx, Vy` | Bitwise OR `Vx \|= Vy` | ✅ |
+| `8XY2` | `AND Vx, Vy` | Bitwise AND `Vx &= Vy` | ✅ |
+| `8XY3` | `XOR Vx, Vy` | Bitwise XOR `Vx ^= Vy` | ✅ |
+| `8XY4` | `ADD Vx, Vy` | Add with Carry: `Vx += Vy`, `VF = carry` | ✅ |
+| `8XY5` | `SUB Vx, Vy` | Subtract: `Vx -= Vy`, `VF = NOT borrow` | ✅ |
+| `8XY6` | `SHR Vx` | Shift Right: `VF = LSB`, `Vx >>= 1` | ✅ |
+| `8XY7` | `SUBN Vx, Vy` | Reverse Subtract: `Vx = Vy - Vx`, `VF = NOT borrow` | ✅ |
+| `8XYE` | `SHL Vx` | Shift Left: `VF = MSB`, `Vx <<= 1` | ✅ |
+| `9XY0` | `SNE Vx, Vy` | Skip next instruction if `Vx != Vy` | ✅ |
+| `ANNN` | `LD I, addr` | Set index register `I = NNN` | ✅ |
+| `BNNN` | `JP V0, addr` | Jump to address `NNN + V0` | ✅ |
+| `CXNN` | `RND Vx, byte` | Random byte masked with `NN`: `Vx = RND() & NN` | ✅ |
+| `DXYN` | `DRW Vx, Vy, N` | Draw `N`-byte sprite at `(Vx, Vy)`, set `VF = collision` | ✅ |
+| `EX9E` | `SKP Vx` | Skip next instruction if key in `Vx` is pressed | ✅ |
+| `EXA1` | `SKNP Vx` | Skip next instruction if key in `Vx` is NOT pressed | ✅ |
+| `FX07` | `LD Vx, DT` | Set `Vx = Delay Timer` | ✅ |
+| `FX0A` | `LD Vx, K` | Wait for keypress, store in `Vx` | ✅ |
+| `FX15` | `LD DT, Vx` | Set `Delay Timer = Vx` | ✅ |
+| `FX18` | `LD ST, Vx` | Set `Sound Timer = Vx` | ✅ |
+| `FX1E` | `ADD I, Vx` | Add `Vx` to index register: `I += Vx` | ✅ |
+| `FX29` | `LD F, Vx` | Set `I = location of 5-byte sprite for digit Vx` | ✅ |
+| `FX33` | `LD B, Vx` | Store BCD representation of `Vx` in `I`, `I+1`, `I+2` | ✅ |
+| `FX55` | `LD [I], Vx` | Dump registers `V0` through `Vx` to memory at `I` | ✅ |
+| `FX65` | `LD Vx, [I]` | Load registers `V0` through `Vx` from memory at `I` | ✅ |
+
+</details>
+
+---
+
+## 🚀 Quickstart Guide
+
+### Prerequisites
+Make sure `dbyte` is installed and available in your `PATH`.
 ```powershell
-dbyte check src/main.dby
-dbyte run src/main.dby
-dbyte run --vm src/main.dby
-dbyte check tests/forge_contract.dby
-dbyte run tests/forge_contract.dby
+dbyte --version
+# Output: DByte 12.0.0
 ```
 
-The Hosted tree interpreter and bytecode VM should produce the same campaign transcript. The entry point is intentionally deterministic because the current compiler build does not expose stable `std.env`, `std.fs`, or local-module bindings in this standalone execution path.
-
-## Campaign
-
-The campaign is called **The Executable Seal**. The player starts in the Entry Vault with three hit points and no inventory. The fixed route is:
-
-```text
-LOOK -> TAKE -> MOVE -> TRAP -> ALIGN -> MOVE -> SOLVE
-```
-
-The route is implemented as typed state transitions. State is packed into a `u32` using room, inventory, hit points, and score fields. Every action returns `Result[u32, u32]`; `?` propagates a failed transition without hidden exceptions or unwinding.
-
-The expected ending includes:
-
-```text
-[RELIC] executable seal accepted
-[SCORE] base: 142
-[SCORE] flawless-route bonus: 50
-[SCORE] final: 192
-[REPLAY] LOOK > TAKE > MOVE > TRAP > ALIGN > MOVE > SOLVE
-[CAMPAIGN] completed with score: 192
-```
-
-The trap is intentional. It removes one hit point and subtracts three score points, so the campaign demonstrates state mutation through explicit returned state rather than through global hidden state.
-
-## DByte feature matrix
-
-| Feature | Where it appears |
-|---|---|
-| `Result[T, E]` | Every state transition and campaign report. |
-| `?` propagation | `advance` and `play_campaign`. |
-| Exhaustive `match` | `report` over `Result.Ok` and `Result.Err`. |
-| Generics | `choose[T]` with explicit `choose[u32](...)`. |
-| Explicit closure | The legacy puzzle library retains a borrow-capturing arithmetic closure. |
-| Lexical `defer` | Campaign scope cleanup message. |
-| Fixed-width types | State, inventory, hit points, score, and action codes use `u32`. |
-| Deterministic replay | The campaign prints its canonical action sequence. |
-
-## Project layout
-
-| File | Purpose |
-|---|---|
-| `src/main.dby` | Stable standalone playable campaign executable. |
-| `src/forge_puzzle.dby` | Reference puzzle library with payload enum and typed snapshot model. |
-| `src/forge_binary.dby` | Optional filesystem/buffer/binary/hash/encoding adapter. |
-| `src/forge_native.dby` | Native-only `@repr(C)` and `extern "C"` seam. |
-| `src/parser.dby` | Legacy parser reference using a VM-safe numeric boundary. |
-| `src/commands.dby` | Legacy command reference for future local-module integration. |
-| `src/puzzle.dby` | Legacy typed puzzle reference. |
-| `src/model.dby` | Legacy fixed-shape model reference. |
-| `tests/forge_contract.dby` | Contract test for `Result` and explicit generic application. |
-| `FORGE_DESIGN.md` | Architecture and protocol notes. |
-| `VALIDATION.md` | Compiler diagnostics and validation status. |
-
-## Why the executable is standalone
-
-Earlier compiler diagnostics showed that this build does not create bindings for several local or standard-library aliases inside a standalone executable. The stable core therefore avoids imports, custom enum constructors, `Option` expression bindings, filesystem calls, and list literals at top level. The richer adapters remain in separate modules so they can be enabled when the compiler profile exposes those interfaces consistently.
-
-## Native and C ABI direction
-
-`src/forge_native.dby` isolates the i686 cdecl boundary. The intended interface uses scalar values no wider than 32 bits and C-compatible function pointers. Aggregates should cross the boundary through pointers to `@repr(C)` structs rather than by-value payload enums or structs.
-
+### 1. Run Built-in Demos
 ```powershell
-dbytec build src/forge_native.dby --target i686-dbyte-none --emit obj -o build/forge_native.o
+# Run IBM Logo Test Demo
+dbyte run src/main.dby demo ibm
+
+# Run Dynamic Maze Generator Demo
+dbyte run src/main.dby demo maze
 ```
 
-## Verification
-
-Run the executable through both hosted engines and compare the transcript:
-
+### 2. Disassemble a ROM File
 ```powershell
-dbyte run src/main.dby > tree.txt
-dbyte run --vm src/main.dby > vm.txt
-fc.exe tree.txt vm.txt
+dbyte run src/main.dby disasm roms/maze.ch8
 ```
 
-Run the contract test separately:
+Output:
+```txt
+----------------------------------------------------------------
+ DISASSEMBLY OF: roms/maze.ch8
+----------------------------------------------------------------
+ADDR    HEX     INSTRUCTION
+----    ----    -----------
+0x0200  00E0    CLS
+0x0202  A212    LD I, 0x0212
+0x0204  C001    RND V0, 0x01
+0x0206  3000    SE V0, 0x00
+0x0208  120C    JP 0x020C
+0x020A  D121    DRW V1, V2, 1
+0x020C  7104    ADD V1, 0x04
+0x020E  3140    SE V1, 0x40
+0x0210  1204    JP 0x0204
+0x0212  6100    LD V1, 0x00
+0x0214  7204    ADD V2, 0x04
+0x0216  3220    SE V2, 0x20
+0x0218  1204    JP 0x0204
+0x021A  1200    JP 0x0200
+----------------------------------------------------------------
+```
 
+### 3. Run Custom External ROM
 ```powershell
-dbyte check tests/forge_contract.dby
-dbyte run tests/forge_contract.dby
+dbyte run src/main.dby run roms/ibm_logo.ch8
 ```
 
-## References
-
-[1]: https://dbytelang.site/ "DByte official site and v12 language materials"
-[2]: https://dbytelang.site/docs/12.0/getting-started/first-program/ "DByte first program and Hosted execution"
-[3]: https://dbytelang.site/docs/12.0/language/result/ "DByte Result and propagation"
-[4]: https://dbytelang.site/docs/12.0/language/payload-enums/ "DByte payload enums"
-[5]: https://dbytelang.site/docs/12.0/language/closures/ "DByte explicit-capture closures"
-[6]: https://dbytelang.site/docs/12.0/language/defer/ "DByte lexical defer"
-
-## Optional argv-driven CLI adapter
-
-`src/forge_cli.dby` is the real command-line adapter. It is intentionally separate from the compiler-stable core because the current compiler profile has not consistently exposed `std.env` in standalone files. If the profile supports that module, use:
-
+### 4. Run Automated Test Suite
 ```powershell
-dbyte check src/forge_cli.dby
-dbyte run src/forge_cli.dby help
-dbyte run src/forge_cli.dby status
-dbyte run src/forge_cli.dby scan
-dbyte run src/forge_cli.dby play
-dbyte run src/forge_cli.dby solve 42
-dbyte run src/forge_cli.dby replay
-dbyte run --vm src/forge_cli.dby play
+dbyte run tests/test_cpu.dby
 ```
 
-`play` executes the same state machine through a single command invocation. The stable `src/main.dby` remains the showcase fallback and always runs the canonical campaign without external bindings.
+---
+
+## 📂 Project Structure
+
+```txt
+dbyte-chip8-emulator/
+├── Dbyte.toml          # DByte package manifest
+├── README.md           # Project documentation
+├── roms/               # Exported CHIP-8 binary ROMs (.ch8)
+│   ├── ibm_logo.ch8
+│   ├── maze.ch8
+│   └── starfield.ch8
+├── src/
+│   ├── main.dby        # Application entrypoint & CLI dispatcher
+│   ├── chip8.dby       # Core CPU, Memory, & Instruction Execution engine
+│   ├── disasm.dby      # Static CHIP-8 Opcode Disassembler
+│   ├── display.dby     # 64x32 Framebuffer & ANSI Terminal Renderer
+│   ├── keypad.dby      # 16-key Hex Keypad State Manager
+│   ├── bits.dby        # Endianness, Hex formatters, & Bitwise ALU helpers
+│   └── roms.dby        # Embedded demo ROM binaries
+└── tests/
+    └── test_cpu.dby    # Automated CPU & Opcode verification suite
+```
+
+---
+
+## 📜 License
+
+This project is licensed under the [GPL-2.0 License](LICENSE).
