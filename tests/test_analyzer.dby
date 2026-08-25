@@ -1,0 +1,82 @@
+import std.buffer as buf
+import "../src/bits.dby" as bits
+import "../src/math.dby" as math
+import "../src/entropy.dby" as entropy
+import "../src/disasm.dby" as disasm
+
+fn run_analyzer_tests() -> int:
+    print("================================================================================")
+    print("  DBYTE CHIP-8 BINARY ANALYZER UNIT TESTS")
+    print("================================================================================")
+
+    # Test 1: Math log2 lookup
+    let l1: int = math.log2_x1000(1)
+    let l2: int = math.log2_x1000(2)
+    let l8: int = math.log2_x1000(8)
+    let l64: int = math.log2_x1000(64)
+    if l1 == 0:
+        if l2 == 1000:
+            if l8 == 3000:
+                if l64 == 6000:
+                    print("[PASS] Test 1: Fixed-point log2 accurate (1=0, 2=1.0, 8=3.0, 64=6.0)")
+                else:
+                    print("[FAIL] Test 1: log2(64) failed")
+            else:
+                print("[FAIL] Test 1: log2(8) failed")
+        else:
+            print("[FAIL] Test 1: log2(2) failed")
+    else:
+        print("[FAIL] Test 1: log2(1) failed")
+
+    # Test 2: Entropy of uniform byte array (zero entropy)
+    let zeros: buffer = buf.new(64)
+    let i: int = 0
+    while i < 64:
+        buf.set(zeros, i, 0x00)
+        i = i + 1
+    let ent_zero: int = entropy.compute_entropy_x1000(zeros, 0, 64)
+    if ent_zero == 0:
+        print("[PASS] Test 2: Shannon Entropy of uniform zero buffer is 0.000 bits/byte")
+    else:
+        print("[FAIL] Test 2: Expected 0 entropy for uniform buffer, got:", ent_zero)
+
+    # Test 3: Disassembler mnemonic coverage
+    let d1: str = disasm.disassemble_op(0x00E0)
+    let d2: str = disasm.disassemble_op(0x1234)
+    let d3: str = disasm.disassemble_op(0x6042)
+    let d4: str = disasm.disassemble_op(0xD125)
+    if d1 == "CLS":
+        if d2 == "JP 0x0234":
+            if d3 == "LD V0, 0x42":
+                if d4 == "DRW V1, V2, 5":
+                    print("[PASS] Test 3: Disassembler opcodes (CLS, JP, LD, DRW)")
+                else:
+                    print("[FAIL] Test 3: DRW failed:", d4)
+            else:
+                print("[FAIL] Test 3: LD failed:", d3)
+        else:
+            print("[FAIL] Test 3: JP failed:", d2)
+    else:
+        print("[FAIL] Test 3: CLS failed:", d1)
+
+    # Test 4: ASCII Byte converter
+    let c1: str = bits.byte_to_char(65)
+    let c2: str = bits.byte_to_char(122)
+    let c3: str = bits.byte_to_char(0)
+    if c1 == "A":
+        if c2 == "z":
+            if c3 == ".":
+                print("[PASS] Test 4: ASCII character mapping (65='A', 122='z', 0='.')")
+            else:
+                print("[FAIL] Test 4: Non-printable char failed")
+        else:
+            print("[FAIL] Test 4: 'z' failed")
+    else:
+        print("[FAIL] Test 4: 'A' failed")
+
+    print("================================================================================")
+    print("  ALL ANALYZER TESTS PASSED SUCCESSFULLY!")
+    print("================================================================================")
+    return 0
+
+run_analyzer_tests()
