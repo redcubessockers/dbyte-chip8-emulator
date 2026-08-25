@@ -1,0 +1,147 @@
+import std.buffer as buf
+import "./bits.dby" as bits
+import "./entropy.dby" as entropy
+import "./hexdump.dby" as hexdump
+
+pub fn analyze_rom(data: buffer, filename: str) -> int:
+    let length: int = buf.len(data)
+    print("================================================================================")
+    print(" [CHIP-8 BINARY STATIC ANALYSIS REPORT]")
+    print("================================================================================")
+    print(" Target File:         ", filename)
+    print(" File Size:            0x" + bits.hex_u16(length), "(", length, "bytes )")
+    print(" Memory Footprint:     0x0200 - 0x" + bits.hex_u16(0x0200 + length), "in CHIP-8 RAM (4096 bytes)")
+    print(" Execution Entry:      0x0200")
+    print(" Instruction Count:   ", length / 2, "opcodes")
+    print("")
+
+    # Opcode Class Distribution Counter
+    let count_flow: int = 0
+    let count_alu: int = 0
+    let count_mem: int = 0
+    let count_drw: int = 0
+    let count_misc: int = 0
+
+    let i: int = 0
+    while i < length - 1:
+        let hi: int = buf.get(data, i)
+        let lo: int = buf.get(data, i + 1)
+        let op_prefix: int = hi / 16
+
+        if op_prefix == 0x1:
+            count_flow = count_flow + 1
+        if op_prefix == 0x2:
+            count_flow = count_flow + 1
+        if op_prefix == 0x3:
+            count_flow = count_flow + 1
+        if op_prefix == 0x4:
+            count_flow = count_flow + 1
+        if op_prefix == 0x5:
+            count_flow = count_flow + 1
+        if op_prefix == 0xB:
+            count_flow = count_flow + 1
+        if op_prefix == 0x0:
+            if lo == 0xEE:
+                count_flow = count_flow + 1
+            else:
+                count_misc = count_misc + 1
+
+        if op_prefix == 0x7:
+            count_alu = count_alu + 1
+        if op_prefix == 0x8:
+            count_alu = count_alu + 1
+        if op_prefix == 0xC:
+            count_alu = count_alu + 1
+
+        if op_prefix == 0x6:
+            count_mem = count_mem + 1
+        if op_prefix == 0xA:
+            count_mem = count_mem + 1
+        if op_prefix == 0xF:
+            count_mem = count_mem + 1
+
+        if op_prefix == 0xD:
+            count_drw = count_drw + 1
+        if op_prefix == 0xE:
+            count_misc = count_misc + 1
+
+        i = i + 2
+
+    print("--------------------------------------------------------------------------------")
+    print(" [OPCODE DISTRIBUTION & METRICS]")
+    print("--------------------------------------------------------------------------------")
+    print("  Control Flow (Jumps/Calls/Skips):", count_flow)
+    print("  ALU / Math / Logic (Add/Xor/Rnd):", count_alu)
+    print("  Memory & Register Ops (LD/ST/I): ", count_mem)
+    print("  Graphics Rendering (DRW Vx,Vy,N):", count_drw)
+    print("  System / Timers / Keys / Sound:  ", count_misc)
+    print("")
+
+    # Subroutine Scanner
+    print("--------------------------------------------------------------------------------")
+    print(" [DISCOVERED SUBROUTINES & CALL TARGETS]")
+    print("--------------------------------------------------------------------------------")
+    let sub_found: int = 0
+    i = 0
+    while i < length - 1:
+        let hi: int = buf.get(data, i)
+        let lo: int = buf.get(data, i + 1)
+        if hi / 16 == 0x2:
+            let target: int = (hi % 16) * 256 + lo
+            print("  CALL at 0x" + bits.hex_u16(0x0200 + i) + " -> Subroutine target: sub_0x" + bits.hex_u16(target))
+            sub_found = sub_found + 1
+        i = i + 2
+
+    if sub_found == 0:
+        print("  (No CALL 2NNN instructions found in this ROM)")
+    print("")
+
+    # Sprite Preview Scanner
+    print("--------------------------------------------------------------------------------")
+    print(" [SPRITE BITMAP EXTRACTOR]")
+    print("--------------------------------------------------------------------------------")
+    let sprite_count: int = 0
+    let last_i_addr: int = 0
+    i = 0
+    while i < length - 1:
+        let hi: int = buf.get(data, i)
+        let lo: int = buf.get(data, i + 1)
+        if hi / 16 == 0xA:
+            last_i_addr = (hi % 16) * 256 + lo
+        if hi / 16 == 0xD:
+            let spr_h: int = lo % 16
+            if last_i_addr >= 0x0200:
+                let rom_off: int = last_i_addr - 0x0200
+                if rom_off + spr_h <= length:
+                    if sprite_count < 3:
+                        print("  Sprite #" + bits.hex_nibble(sprite_count) + " at RAM 0x" + bits.hex_u16(last_i_addr) + " (Height: " + bits.hex_nibble(spr_h) + " bytes):")
+                        let sy: int = 0
+                        while sy < spr_h:
+                            let sbyte: int = buf.get(data, rom_off + sy)
+                            let sline: str = "    "
+                            let sx: int = 0
+                            while sx < 8:
+                                let bit: int = (sbyte / 128) % 2
+                                if bit == 1:
+                                    sline = sline + "##"
+                                else:
+                                    sline = sline + ".."
+                                sbyte = (sbyte % 128) * 2
+                                sx = sx + 1
+                            print(sline)
+                            sy = sy + 1
+                        print("")
+                        sprite_count = sprite_count + 1
+        i = i + 2
+
+    if sprite_count == 0:
+        print("  (No static sprite definitions found)")
+    print("")
+
+    entropy.scan_entropy(data, 32)
+    print("")
+    print("--------------------------------------------------------------------------------")
+    print(" [RAW HEX DUMP] (First 128 bytes)")
+    print("--------------------------------------------------------------------------------")
+    hexdump.hexdump(data, 0, 128)
+    return 0

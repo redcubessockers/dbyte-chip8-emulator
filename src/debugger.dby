@@ -1,0 +1,70 @@
+import std.buffer as buf
+import "./bits.dby" as bits
+import "./chip8.dby" as chip8
+import "./disasm.dby" as disasm
+
+pub fn run_step_debugger(data: bytes, title: str, num_steps: int) -> int:
+    let mem: buffer = chip8.create_memory()
+    let v: buffer = chip8.create_v()
+    let stack: buffer = chip8.create_stack()
+    let gfx: buffer = chip8.create_gfx()
+    let keys: buffer = chip8.create_keys()
+    let state: buffer = chip8.create_state()
+    let rng_seed: int = 987654321
+
+    chip8.load_fontset(mem)
+    let loaded: int = chip8.load_rom_bytes(mem, data)
+
+    print("================================================================================")
+    print(" [CHIP-8 CPU STEP-BY-STEP INSTRUCTION TRACER & REGISTER WATCH]")
+    print("================================================================================")
+    print(" Target ROM:   ", title, "(", loaded, "bytes loaded at 0x0200)")
+    print(" Trace Limit:  ", num_steps, "instructions")
+    print("--------------------------------------------------------------------------------")
+    print(" STEP  PC      OPCODE  MNEMONIC           V0 V1 V2 V3 V4 V5 V6 V7  I      SP")
+    print(" ----  ------  ------  -----------------  -- -- -- -- -- -- -- --  ----   --")
+
+    let step_i: int = 0
+    let running: int = 1
+    while running == 1:
+        if step_i >= num_steps:
+            running = 0
+        else:
+            if chip8.get_halted(state) == 1:
+                print("[!] CPU HALTED at step:", step_i)
+                running = 0
+            else:
+                let cur_pc: int = chip8.get_pc(state)
+                let hi: int = buf.get(mem, cur_pc)
+                let lo: int = buf.get(mem, cur_pc + 1)
+                let op: int = hi * 256 + lo
+                let mnem: str = disasm.disassemble_op(op)
+
+                # Format row
+                let s_step: str = bits.hex_u16(step_i)
+                let s_pc: str = bits.hex_u16(cur_pc)
+                let s_op: str = bits.hex_u16(op)
+                let s_i: str = bits.hex_u16(chip8.get_i(state))
+                let s_sp: str = bits.hex_u8(chip8.get_sp(state))
+
+                let regs_str: str = ""
+                let ri: int = 0
+                while ri < 8:
+                    regs_str = regs_str + bits.hex_u8(buf.get(v, ri)) + " "
+                    ri = ri + 1
+
+                # Pad mnemonic to 17 chars
+                let pad_mnem: str = mnem
+                while len(pad_mnem) < 17:
+                    pad_mnem = pad_mnem + " "
+
+                print(" " + s_step + "  0x" + s_pc + "  0x" + s_op + "  " + pad_mnem + "  " + regs_str + "0x" + s_i + " 0x" + s_sp)
+
+                rng_seed = chip8.step(mem, v, stack, gfx, keys, state, rng_seed)
+                if step_i % 10 == 0:
+                    chip8.tick_timers(state)
+                step_i = step_i + 1
+
+    print("================================================================================")
+    print("[+] Execution trace complete. Final PC: 0x" + bits.hex_u16(chip8.get_pc(state)))
+    return 0

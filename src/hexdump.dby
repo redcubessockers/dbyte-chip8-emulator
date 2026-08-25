@@ -1,0 +1,38 @@
+import std.buffer as buf
+import "./bits.dby" as bits
+
+pub fn hexdump(data: buffer, start: int, count: int) -> int:
+    let length: int = buf.len(data)
+    let end: int = start + count
+    if end > length:
+        end = length
+    let row: int = start
+
+    print("OFFSET      00 01 02 03 04 05 06 07  08 09 0A 0B 0C 0D 0E 0F  ASCII")
+    print("----------  ---- ---- ---- ---- ---- ---- ---- ----  ---- ---- ---- ---- ---- ---- ---- ----  ----------------")
+
+    let running: int = 1
+    while running == 1:
+        if row >= end:
+            running = 0
+        else:
+            let line: str = "0x" + bits.hex_u16(0x200 + row) + "      "
+            let ascii: str = "|"
+            let col: int = 0
+            while col < 16:
+                if col == 8:
+                    line = line + " "
+                let cur: int = row + col
+                if cur < end:
+                    let bval: int = buf.get(data, cur)
+                    line = line + bits.hex_u8(bval) + " "
+                    ascii = ascii + bits.byte_to_char(bval)
+                else:
+                    line = line + "   "
+                    ascii = ascii + " "
+                col = col + 1
+
+            ascii = ascii + "|"
+            print(line + " " + ascii)
+            row = row + 16
+    return 0

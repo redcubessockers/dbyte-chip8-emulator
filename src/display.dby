@@ -1,14 +1,5 @@
 import std.buffer as buf
 
-pub fn width() -> int:
-    return 64
-
-pub fn height() -> int:
-    return 32
-
-pub fn total_pixels() -> int:
-    return 2048
-
 pub fn clear(gfx: buffer) -> int:
     let i: int = 0
     while i < 2048:
@@ -17,43 +8,31 @@ pub fn clear(gfx: buffer) -> int:
     return 0
 
 pub fn get_pixel(gfx: buffer, x: int, y: int) -> int:
-    let px: int = x % 64
-    let py: int = y % 32
-    if px < 0:
-        px = px + 64
-    if py < 0:
-        py = py + 32
-    return buf.get(gfx, py * 64 + px)
+    let wrap_x: int = x % 64
+    let wrap_y: int = y % 32
+    return buf.get(gfx, wrap_y * 64 + wrap_x)
 
 pub fn set_pixel(gfx: buffer, x: int, y: int, val: int) -> int:
-    let px: int = x % 64
-    let py: int = y % 32
-    if px < 0:
-        px = px + 64
-    if py < 0:
-        py = py + 32
-    buf.set(gfx, py * 64 + px, val)
+    let wrap_x: int = x % 64
+    let wrap_y: int = y % 32
+    buf.set(gfx, wrap_y * 64 + wrap_x, val)
     return 0
 
-pub fn render_frame(gfx: buffer, title: str, info: str) -> int:
-    print("\x1b[H")
-    print("┌────────────────────────────────────────────────────────────────┐")
-    print("│ DBYTE CHIP-8 EMULATOR │ " + title)
-    print("├────────────────────────────────────────────────────────────────┤")
+pub fn render_framebuffer_clean(gfx: buffer) -> int:
+    print("+----------------------------------------------------------------+")
     let y: int = 0
     while y < 32:
-        let line: str = "│"
+        let line: str = "|"
         let x: int = 0
         while x < 64:
-            let p: int = buf.get(gfx, y * 64 + x)
-            if p == 1:
-                line = line + "█"
+            let pixel: int = buf.get(gfx, y * 64 + x)
+            if pixel == 1:
+                line = line + "#"
             else:
                 line = line + " "
             x = x + 1
-        line = line + "│"
+        line = line + "|"
         print(line)
         y = y + 1
-    print("└────────────────────────────────────────────────────────────────┘")
-    print("Status: " + info)
+    print("+----------------------------------------------------------------+")
     return 0

@@ -1,0 +1,225 @@
+import std.buffer as buf
+import std.fs as fs
+import "./bits.dby" as bits
+
+pub fn parse_nibble_byte(nbyte: int) -> int:
+    if nbyte >= 48:
+        if nbyte <= 57:
+            return nbyte - 48
+    if nbyte >= 65:
+        if nbyte <= 70:
+            return nbyte - 55
+    if nbyte >= 97:
+        if nbyte <= 102:
+            return nbyte - 87
+    return 0
+
+pub fn parse_hex_slice(hbuf: buffer, hstart: int, hend: int) -> int:
+    let hs: int = hstart
+    let skipping: int = 1
+    while skipping == 1:
+        if hs >= hend:
+            skipping = 0
+        else:
+            let sch: int = buf.get(hbuf, hs)
+            if sch == 32:
+                hs = hs + 1
+            else:
+                if sch == 9:
+                    hs = hs + 1
+                else:
+                    skipping = 0
+
+    if hend - hs >= 2:
+        if buf.get(hbuf, hs) == 48:
+            let next_b: int = buf.get(hbuf, hs + 1)
+            if next_b == 120:
+                hs = hs + 2
+            else:
+                if next_b == 88:
+                    hs = hs + 2
+
+    let hres: int = 0
+    let reading: int = 1
+    while reading == 1:
+        if hs >= hend:
+            reading = 0
+        else:
+            let hch: int = buf.get(hbuf, hs)
+            if hch == 59:
+                reading = 0
+            else:
+                if hch == 35:
+                    reading = 0
+                else:
+                    if hch == 32:
+                        reading = 0
+                    else:
+                        let hnib: int = parse_nibble_byte(hch)
+                        hres = hres * 16 + hnib
+                        hs = hs + 1
+    return hres
+
+pub fn compile_asm_file(in_path: str, out_path: str) -> int:
+    if fs.exists(in_path) == 0:
+        print("[Error] Source file not found:", in_path)
+        return 0
+
+    let raw_bytes: bytes = fs.read_bytes(in_path)
+    let in_buf: buffer = buf.from_bytes(raw_bytes)
+    let text_len: int = buf.len(in_buf)
+    let out_buf: buffer = buf.new(4096)
+    let out_pos: int = 0
+
+    print("================================================================================")
+    print(" [CHIP-8 TWO-PASS COMPILER & ASSEMBLER]")
+    print("================================================================================")
+    print(" Source File: ", in_path)
+    print(" Output ROM:  ", out_path)
+    print("--------------------------------------------------------------------------------")
+
+    let line_start: int = 0
+    let cur_idx: int = 0
+    let line_count: int = 0
+
+    while cur_idx <= text_len:
+        let is_eol: int = 0
+        if cur_idx == text_len:
+            is_eol = 1
+        else:
+            if buf.get(in_buf, cur_idx) == 10:
+                is_eol = 1
+
+        if is_eol == 1:
+            let line_end: int = cur_idx
+            if line_end > line_start:
+                if buf.get(in_buf, line_end - 1) == 13:
+                    line_end = line_end - 1
+
+            # Skip leading spaces and tabs
+            let eff_start: int = line_start
+            let trim_sp: int = 1
+            while trim_sp == 1:
+                if eff_start >= line_end:
+                    trim_sp = 0
+                else:
+                    let ws: int = buf.get(in_buf, eff_start)
+                    if ws == 32:
+                        eff_start = eff_start + 1
+                    else:
+                        if ws == 9:
+                            eff_start = eff_start + 1
+                        else:
+                            trim_sp = 0
+
+            let line_len: int = line_end - eff_start
+            if line_len >= 2:
+                let first_ch: int = buf.get(in_buf, eff_start)
+                if first_ch != 59:
+                    if first_ch != 35:
+                        let op: int = 0
+                        let is_op: int = 0
+
+                        # CLS: 'C'(67) 'L'(76) 'S'(83)
+                        if line_len >= 3:
+                            if buf.get(in_buf, eff_start) == 67:
+                                if buf.get(in_buf, eff_start + 1) == 76:
+                                    if buf.get(in_buf, eff_start + 2) == 83:
+                                        op = 0x00E0
+                                        is_op = 1
+
+                        # RET: 'R'(82) 'E'(69) 'T'(84)
+                        if line_len >= 3:
+                            if buf.get(in_buf, eff_start) == 82:
+                                if buf.get(in_buf, eff_start + 1) == 69:
+                                    if buf.get(in_buf, eff_start + 2) == 84:
+                                        op = 0x00EE
+                                        is_op = 1
+
+                        # JP 0xNNN: 'J'(74) 'P'(80) ' '(32)
+                        if line_len >= 5:
+                            if buf.get(in_buf, eff_start) == 74:
+                                if buf.get(in_buf, eff_start + 1) == 80:
+                                    if buf.get(in_buf, eff_start + 2) == 32:
+                                        let addr: int = parse_hex_slice(in_buf, eff_start + 3, line_end)
+                                        op = 0x1000 + (addr % 4096)
+                                        is_op = 1
+
+                        # CALL 0xNNN: 'C'(67) 'A'(65) 'L'(76) 'L'(76) ' '(32)
+                        if line_len >= 7:
+                            if buf.get(in_buf, eff_start) == 67:
+                                if buf.get(in_buf, eff_start + 1) == 65:
+                                    if buf.get(in_buf, eff_start + 2) == 76:
+                                        if buf.get(in_buf, eff_start + 3) == 76:
+                                            if buf.get(in_buf, eff_start + 4) == 32:
+                                                let addr: int = parse_hex_slice(in_buf, eff_start + 5, line_end)
+                                                op = 0x2000 + (addr % 4096)
+                                                is_op = 1
+
+                        # LD I, 0xNNN: 'L'(76) 'D'(68) ' '(32) 'I'(73)
+                        if line_len >= 8:
+                            if buf.get(in_buf, eff_start) == 76:
+                                if buf.get(in_buf, eff_start + 1) == 68:
+                                    if buf.get(in_buf, eff_start + 3) == 73:
+                                        let addr: int = parse_hex_slice(in_buf, eff_start + 6, line_end)
+                                        op = 0xA000 + (addr % 4096)
+                                        is_op = 1
+
+                        # LD Vx, 0xKK: 'L'(76) 'D'(68) ' '(32) 'V'(86)
+                        if line_len >= 9:
+                            if buf.get(in_buf, eff_start) == 76:
+                                if buf.get(in_buf, eff_start + 1) == 68:
+                                    if buf.get(in_buf, eff_start + 3) == 86:
+                                        let rx: int = parse_nibble_byte(buf.get(in_buf, eff_start + 4))
+                                        let kk: int = parse_hex_slice(in_buf, eff_start + 7, line_end)
+                                        op = 0x6000 + rx * 256 + (kk % 256)
+                                        is_op = 1
+
+                        # ADD Vx, 0xKK: 'A'(65) 'D'(68) 'D'(68) ' '(32) 'V'(86)
+                        if line_len >= 10:
+                            if buf.get(in_buf, eff_start) == 65:
+                                if buf.get(in_buf, eff_start + 1) == 68:
+                                    if buf.get(in_buf, eff_start + 2) == 68:
+                                        if buf.get(in_buf, eff_start + 4) == 86:
+                                            let rx: int = parse_nibble_byte(buf.get(in_buf, eff_start + 5))
+                                            let kk: int = parse_hex_slice(in_buf, eff_start + 8, line_end)
+                                            op = 0x7000 + rx * 256 + (kk % 256)
+                                            is_op = 1
+
+                        # DRW Vx, Vy, N: 'D'(68) 'R'(82) 'W'(87)
+                        if line_len >= 12:
+                            if buf.get(in_buf, eff_start) == 68:
+                                if buf.get(in_buf, eff_start + 1) == 82:
+                                    if buf.get(in_buf, eff_start + 2) == 87:
+                                        let rx: int = parse_nibble_byte(buf.get(in_buf, eff_start + 5))
+                                        let ry: int = parse_nibble_byte(buf.get(in_buf, eff_start + 9))
+                                        let n: int = parse_nibble_byte(buf.get(in_buf, eff_start + 12))
+                                        op = 0xD000 + rx * 256 + ry * 16 + n
+                                        is_op = 1
+
+                        if is_op == 1:
+                            let hi_byte: int = (op / 256) % 256
+                            let lo_byte: int = op % 256
+                            buf.set(out_buf, out_pos, hi_byte)
+                            buf.set(out_buf, out_pos + 1, lo_byte)
+                            print(" 0x" + bits.hex_u16(0x0200 + out_pos) + " | 0x" + bits.hex_u16(op))
+                            out_pos = out_pos + 2
+                            line_count = line_count + 1
+
+            line_start = cur_idx + 1
+        cur_idx = cur_idx + 1
+
+    let out_slice: buffer = buf.new(out_pos)
+    let bi: int = 0
+    while bi < out_pos:
+        buf.set(out_slice, bi, buf.get(out_buf, bi))
+        bi = bi + 1
+
+    let out_bytes: bytes = buf.to_bytes(out_slice)
+    fs.write_bytes(out_path, out_bytes)
+
+    print("--------------------------------------------------------------------------------")
+    print("[+] Successfully compiled " + bits.hex_u16(line_count) + " instructions into " + bits.hex_u16(out_pos) + " bytes.")
+    print("[+] Saved binary to: " + out_path)
+    print("================================================================================")
+    return 1

@@ -1,0 +1,97 @@
+import std.buffer as buf
+import std.fs as fs
+import "./bits.dby" as bits
+import "./disasm.dby" as disasm
+
+pub fn patch_rom_byte(rom_path: str, offset: int, new_val: int, out_path: str) -> int:
+    if fs.exists(rom_path) == 0:
+        print("[Error] File not found:", rom_path)
+        return 0
+
+    let raw: bytes = fs.read_bytes(rom_path)
+    let b: buffer = buf.from_bytes(raw)
+    let length: int = buf.len(b)
+
+    print("================================================================================")
+    print(" [CHIP-8 BINARY PATCHER & MEMORY MOD ENGINE]")
+    print("================================================================================")
+    print(" Target File: ", rom_path)
+    print(" Patch Offset: 0x" + bits.hex_u16(offset))
+    print(" Output File: ", out_path)
+    print("--------------------------------------------------------------------------------")
+
+    if offset < length:
+        let old_val: int = buf.get(b, offset)
+        buf.set(b, offset, new_val % 256)
+        print(" [PATCH] Offset 0x" + bits.hex_u16(0x0200 + offset) + ": 0x" + bits.hex_u8(old_val) + " --> 0x" + bits.hex_u8(new_val))
+    else:
+        print("[Warning] Offset out of file bounds")
+
+    let out_bytes: bytes = buf.to_bytes(b)
+    fs.write_bytes(out_path, out_bytes)
+    print("--------------------------------------------------------------------------------")
+    print("[+] Patch applied successfully. Saved to: " + out_path)
+    print("================================================================================")
+    return 1
+
+pub fn diff_roms(rom1_path: str, rom2_path: str) -> int:
+    if fs.exists(rom1_path) == 0:
+        print("[Error] File not found:", rom1_path)
+        return 0
+    if fs.exists(rom2_path) == 0:
+        print("[Error] File not found:", rom2_path)
+        return 0
+
+    let raw1: bytes = fs.read_bytes(rom1_path)
+    let raw2: bytes = fs.read_bytes(rom2_path)
+    let b1: buffer = buf.from_bytes(raw1)
+    let b2: buffer = buf.from_bytes(raw2)
+
+    let l1: int = buf.len(b1)
+    let l2: int = buf.len(b2)
+    let max_len: int = l1
+    if l2 > max_len:
+        max_len = l2
+
+    print("================================================================================")
+    print(" [BINARY ROM DIFF & OPCODES COMPARISON]")
+    print("================================================================================")
+    print(" ROM 1: " + rom1_path + " (" + bits.hex_u16(l1) + " bytes)")
+    print(" ROM 2: " + rom2_path + " (" + bits.hex_u16(l2) + " bytes)")
+    print("--------------------------------------------------------------------------------")
+    print(" ADDR    ROM1 HEX   ROM1 DISASM       | ROM2 HEX   ROM2 DISASM")
+    print(" ----    --------   -----------       | --------   -----------")
+
+    let diff_count: int = 0
+    let i: int = 0
+    while i < max_len:
+        let val1: int = 0
+        let val2: int = 0
+        if i < l1:
+            val1 = buf.get(b1, i)
+        if i < l2:
+            val2 = buf.get(b2, i)
+
+        if val1 != val2:
+            let op1: int = 0
+            let op2: int = 0
+            if i + 1 < l1:
+                op1 = buf.get(b1, i) * 256 + buf.get(b1, i + 1)
+            if i + 1 < l2:
+                op2 = buf.get(b2, i) * 256 + buf.get(b2, i + 1)
+
+            let s_addr: str = bits.hex_u16(0x0200 + i)
+            let s_op1: str = bits.hex_u16(op1)
+            let s_op2: str = bits.hex_u16(op2)
+            let d1: str = disasm.disassemble_op(op1)
+            let d2: str = disasm.disassemble_op(op2)
+
+            print(" 0x" + s_addr + " 0x" + s_op1 + "   " + d1 + "  !=  0x" + s_op2 + "   " + d2)
+            diff_count = diff_count + 1
+            i = i + 1
+        i = i + 1
+
+    print("--------------------------------------------------------------------------------")
+    print("[+] Diff analysis complete. Total differences: " + bits.hex_u16(diff_count))
+    print("================================================================================")
+    return 0

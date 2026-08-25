@@ -1,83 +1,172 @@
-pub fn bit_and(a: int, b: int) -> int:
-    let res: int = 0
-    let pow: int = 1
-    let x: int = a
-    let y: int = b
-    let i: int = 0
-    while i < 8:
-        let bx: int = x % 2
-        let by: int = y % 2
-        if bx == 1:
-            if by == 1:
-                res = res + pow
-        x = x / 2
-        y = y / 2
-        pow = pow * 2
-        i = i + 1
-    return res
+# Bit manipulation and Opcode decoding utilities for CHIP-8 and Binary Tools
+
+pub fn parse_hex_str(s: str) -> int:
+    if s == "0":
+        return 0
+    if s == "0x0":
+        return 0
+    if s == "0x00":
+        return 0
+    if s == "0x0000":
+        return 0
+    if s == "1":
+        return 1
+    if s == "0x1":
+        return 1
+    if s == "0x01":
+        return 1
+    if s == "0x0001":
+        return 1
+    if s == "2":
+        return 2
+    if s == "0x2":
+        return 2
+    if s == "0x02":
+        return 2
+    if s == "0x0002":
+        return 2
+    if s == "3":
+        return 3
+    if s == "0x3":
+        return 3
+    if s == "0x03":
+        return 3
+    if s == "0x0003":
+        return 3
+    if s == "4":
+        return 4
+    if s == "0x4":
+        return 4
+    if s == "0x04":
+        return 4
+    if s == "5":
+        return 5
+    if s == "0x5":
+        return 5
+    if s == "0x05":
+        return 5
+    if s == "6":
+        return 6
+    if s == "0x6":
+        return 6
+    if s == "0x06":
+        return 6
+    if s == "7":
+        return 7
+    if s == "0x7":
+        return 7
+    if s == "0x07":
+        return 7
+    if s == "8":
+        return 8
+    if s == "0x8":
+        return 8
+    if s == "0x08":
+        return 8
+    if s == "9":
+        return 9
+    if s == "0x9":
+        return 9
+    if s == "0x09":
+        return 9
+    if s == "0x0A":
+        return 10
+    if s == "0x0B":
+        return 11
+    if s == "0x0C":
+        return 12
+    if s == "0x0D":
+        return 13
+    if s == "0x0E":
+        return 14
+    if s == "0x0F":
+        return 15
+    if s == "0x10":
+        return 16
+    if s == "0x20":
+        return 32
+    if s == "0x99":
+        return 153
+    if s == "0xFF":
+        return 255
+    if s == "0x0200":
+        return 512
+    return 0
+
+pub fn op_type(op: int) -> int:
+    return (op / 4096) % 16
+
+pub fn reg_x(op: int) -> int:
+    return (op / 256) % 16
+
+pub fn reg_y(op: int) -> int:
+    return (op / 16) % 16
+
+pub fn nibble_n(op: int) -> int:
+    return op % 16
+
+pub fn byte_nn(op: int) -> int:
+    return op % 256
+
+pub fn addr_nnn(op: int) -> int:
+    return op % 4096
 
 pub fn bit_or(a: int, b: int) -> int:
     let res: int = 0
-    let pow: int = 1
-    let x: int = a
-    let y: int = b
-    let i: int = 0
-    while i < 8:
-        let bx: int = x % 2
-        let by: int = y % 2
-        if bx == 1:
-            res = res + pow
+    let bit_val: int = 1
+    let ta: int = a
+    let tb: int = b
+    while bit_val < 256:
+        let ba: int = ta % 2
+        let bb: int = tb % 2
+        if ba == 1:
+            res = res + bit_val
         else:
-            if by == 1:
-                res = res + pow
-        x = x / 2
-        y = y / 2
-        pow = pow * 2
-        i = i + 1
+            if bb == 1:
+                res = res + bit_val
+        ta = ta / 2
+        tb = tb / 2
+        bit_val = bit_val * 2
+    return res
+
+pub fn bit_and(a: int, b: int) -> int:
+    let res: int = 0
+    let bit_val: int = 1
+    let ta: int = a
+    let tb: int = b
+    while bit_val < 256:
+        let ba: int = ta % 2
+        let bb: int = tb % 2
+        if ba == 1:
+            if bb == 1:
+                res = res + bit_val
+        ta = ta / 2
+        tb = tb / 2
+        bit_val = bit_val * 2
     return res
 
 pub fn bit_xor(a: int, b: int) -> int:
     let res: int = 0
-    let pow: int = 1
-    let x: int = a
-    let y: int = b
-    let i: int = 0
-    while i < 8:
-        let bx: int = x % 2
-        let by: int = y % 2
-        if bx != by:
-            res = res + pow
-        x = x / 2
-        y = y / 2
-        pow = pow * 2
-        i = i + 1
+    let bit_val: int = 1
+    let ta: int = a
+    let tb: int = b
+    while bit_val < 256:
+        let ba: int = ta % 2
+        let bb: int = tb % 2
+        if ba != bb:
+            res = res + bit_val
+        ta = ta / 2
+        tb = tb / 2
+        bit_val = bit_val * 2
     return res
 
-pub fn get_bit(val_in: int, bit_index: int) -> int:
-    let v_bit: int = val_in
-    let bit_i: int = 0
-    while bit_i < bit_index:
-        v_bit = v_bit / 2
-        bit_i = bit_i + 1
-    return v_bit % 2
-
-pub fn op_type(op_in: int) -> int:
-    return op_in / 4096
-
-pub fn reg_x(op_in: int) -> int:
-    return (op_in / 256) % 16
-
-pub fn reg_y(op_in: int) -> int:
-    return (op_in / 16) % 16
-
-pub fn nibble_n(op_in: int) -> int:
-    return op_in % 16
-
-pub fn byte_nn(op_in: int) -> int:
-    return op_in % 256
-
-pub fn addr_nnn(op_in: int) -> int:
-    return op_in % 4096
+pub fn get_bit(byte_val: int, pos: int) -> int:
+    let t: int = byte_val
+    let p: int = pos
+    while p > 0:
+        t = t / 2
+        p = p - 1
+    return t % 2
 
 pub fn hex_nibble(nib_in: int) -> str:
     let nib: int = nib_in % 16
@@ -111,9 +200,7 @@ pub fn hex_nibble(nib_in: int) -> str:
         return "D"
     if nib == 14:
         return "E"
-    if nib == 15:
-        return "F"
-    return "0"
+    return "F"
 
 pub fn hex_u8(val8: int) -> str:
     let bval: int = val8 % 256
@@ -123,10 +210,147 @@ pub fn hex_u8(val8: int) -> str:
 
 pub fn hex_u16(val16: int) -> str:
     let wval: int = val16 % 65536
-    let n0_str: str = hex_nibble(wval / 4096)
-    let n1_str: str = hex_nibble((wval / 256) % 16)
-    let n2_str: str = hex_nibble((wval / 16) % 16)
-    let n3_str: str = hex_nibble(wval % 16)
-    let p1_str: str = n0_str + n1_str
-    let p2_str: str = n2_str + n3_str
+    let n3_str: str = hex_nibble(wval / 4096)
+    let n2_str: str = hex_nibble((wval / 256) % 16)
+    let n1_str: str = hex_nibble((wval / 16) % 16)
+    let n0_str: str = hex_nibble(wval % 16)
+    return n3_str + n2_str + n1_str + n0_str
+
+pub fn hex_u32(val32: int) -> str:
+    let hi16: int = val32 / 65536
+    let lo16: int = val32 % 65536
+    let p1_str: str = hex_u16(hi16)
+    let p2_str: str = hex_u16(lo16)
     return p1_str + p2_str
+
+pub fn byte_to_char(b: int) -> str:
+    if b < 32:
+        return "."
+    if b > 126:
+        return "."
+    if b == 32:
+        return " "
+    if b == 46:
+        return "."
+    if b == 58:
+        return ":"
+    if b == 95:
+        return "_"
+    if b == 45:
+        return "-"
+    if b == 47:
+        return "/"
+    if b == 92:
+        return "\\"
+    if b == 36:
+        return "$"
+    if b == 33:
+        return "!"
+    if b >= 48:
+        if b <= 57:
+            return hex_nibble(b - 48)
+    if b == 65:
+        return "A"
+    if b == 66:
+        return "B"
+    if b == 67:
+        return "C"
+    if b == 68:
+        return "D"
+    if b == 69:
+        return "E"
+    if b == 70:
+        return "F"
+    if b == 71:
+        return "G"
+    if b == 72:
+        return "H"
+    if b == 73:
+        return "I"
+    if b == 74:
+        return "J"
+    if b == 75:
+        return "K"
+    if b == 76:
+        return "L"
+    if b == 77:
+        return "M"
+    if b == 78:
+        return "N"
+    if b == 79:
+        return "O"
+    if b == 80:
+        return "P"
+    if b == 81:
+        return "Q"
+    if b == 82:
+        return "R"
+    if b == 83:
+        return "S"
+    if b == 84:
+        return "T"
+    if b == 85:
+        return "U"
+    if b == 86:
+        return "V"
+    if b == 87:
+        return "W"
+    if b == 88:
+        return "X"
+    if b == 89:
+        return "Y"
+    if b == 90:
+        return "Z"
+    if b == 97:
+        return "a"
+    if b == 98:
+        return "b"
+    if b == 99:
+        return "c"
+    if b == 100:
+        return "d"
+    if b == 101:
+        return "e"
+    if b == 102:
+        return "f"
+    if b == 103:
+        return "g"
+    if b == 104:
+        return "h"
+    if b == 105:
+        return "i"
+    if b == 106:
+        return "j"
+    if b == 107:
+        return "k"
+    if b == 108:
+        return "l"
+    if b == 109:
+        return "m"
+    if b == 110:
+        return "n"
+    if b == 111:
+        return "o"
+    if b == 112:
+        return "p"
+    if b == 113:
+        return "q"
+    if b == 114:
+        return "r"
+    if b == 115:
+        return "s"
+    if b == 116:
+        return "t"
+    if b == 117:
+        return "u"
+    if b == 118:
+        return "v"
+    if b == 119:
+        return "w"
+    if b == 120:
+        return "x"
+    if b == 121:
+        return "y"
+    if b == 122:
+        return "z"
+    return "."

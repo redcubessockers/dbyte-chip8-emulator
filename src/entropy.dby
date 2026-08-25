@@ -1,0 +1,91 @@
+import std.buffer as buf
+import "./bits.dby" as bits
+import "./math.dby" as math
+
+pub fn compute_entropy_x1000(data: buffer, start: int, length: int) -> int:
+    let freq: buffer = buf.new(256)
+    let i: int = start
+    let end: int = start + length
+    if end > buf.len(data):
+        end = buf.len(data)
+    let actual_len: int = end - start
+    if actual_len <= 0:
+        return 0
+
+    while i < end:
+        let byte_val: int = buf.get(data, i) % 256
+        let prev: int = buf.get(freq, byte_val)
+        if prev < 255:
+            buf.set(freq, byte_val, prev + 1)
+        i = i + 1
+
+    let sum_c_log_c: int = 0
+    let b: int = 0
+    while b < 256:
+        let cnt: int = buf.get(freq, b)
+        if cnt > 0:
+            let log_c: int = math.log2_x1000(cnt)
+            sum_c_log_c = sum_c_log_c + cnt * log_c
+        b = b + 1
+
+    let log_n: int = math.log2_x1000(actual_len)
+    let entropy: int = log_n - (sum_c_log_c / actual_len)
+    if entropy < 0:
+        entropy = 0
+    return entropy
+
+pub fn entropy_bar(entropy_x1000: int) -> str:
+    let blocks: int = entropy_x1000 * 30 / 8000
+    let bar: str = "["
+    let bi: int = 0
+    while bi < 30:
+        if bi < blocks:
+            bar = bar + "#"
+        else:
+            bar = bar + "."
+        bi = bi + 1
+    bar = bar + "]"
+    return bar
+
+pub fn entropy_label(entropy_x1000: int) -> str:
+    if entropy_x1000 < 2500:
+        return "LOW (Structured Headers / Padding)"
+    if entropy_x1000 < 5000:
+        return "MED (Bytecode / Instructions / Strings)"
+    if entropy_x1000 < 6800:
+        return "HIGH (Dense Bitmaps / Compressed Graphics)"
+    return "PACKED / CRYPT (High Randomness Payload)"
+
+pub fn scan_entropy(data: buffer, block_size: int) -> int:
+    let length: int = buf.len(data)
+    print("--------------------------------------------------------------------------------")
+    print(" SHANNON ENTROPY PROFILE (Block size:", block_size, "bytes)")
+    print(" Metric: 0.000 (Uniform/Zeroes) to 8.000 (Maximum Randomness/Compressed)")
+    print("--------------------------------------------------------------------------------")
+    print(" BLOCK   OFFSET      ENTROPY (bits) GRAPH (30 cols)                VERDICT")
+    print(" -----   ----------  -------------- ------------------------------ -------")
+
+    let blk: int = 0
+    let blk_count: int = length / block_size
+    if blk_count > 32:
+        blk_count = 32
+
+    while blk < blk_count:
+        let start: int = blk * block_size
+        let ent: int = compute_entropy_x1000(data, start, block_size)
+        let bar: str = entropy_bar(ent)
+        let verdict: str = entropy_label(ent)
+        let blk_str: str = bits.hex_u8(blk % 256)
+        let off_str: str = bits.hex_u16(0x200 + start)
+        let ent_hi: str = bits.hex_nibble(ent / 1000)
+        let ent_lo: str = bits.hex_u8((ent % 1000) * 256 / 1000)
+        print(" [" + blk_str + "]    0x" + off_str + "  " + ent_hi + "." + ent_lo + " b/B     " + bar + " " + verdict)
+        blk = blk + 1
+
+    let total_ent: int = compute_entropy_x1000(data, 0, length)
+    let t_hi: str = bits.hex_nibble(total_ent / 1000)
+    let t_lo: str = bits.hex_u8((total_ent % 1000) * 256 / 1000)
+    print("--------------------------------------------------------------------------------")
+    print(" TOTAL ROM ENTROPY:", t_hi + "." + t_lo, "bits/byte -", entropy_label(total_ent))
+    print("================================================================================")
+    return 0

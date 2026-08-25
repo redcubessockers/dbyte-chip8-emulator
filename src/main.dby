@@ -8,6 +8,13 @@ import "./chip8.dby" as chip8
 import "./disasm.dby" as disasm
 import "./roms.dby" as roms
 import "./tui.dby" as tui
+import "./analyzer.dby" as analyzer
+import "./entropy.dby" as entropy
+import "./hexdump.dby" as hexdump
+import "./asm.dby" as assembler
+import "./debugger.dby" as debugger
+import "./patcher.dby" as patcher
+import "./c_compiler.dby" as c_compiler
 
 fn print_banner() -> int:
     print("================================================================================")
@@ -17,7 +24,7 @@ fn print_banner() -> int:
     print("  | |_| | |_) |\\ V /   | | | |___ | |___|  _  || ||  __/_____ \\__, |            ")
     print("  |____/|____/  |_|    |_| |_____| \\____|_| |_|___|_|          /_/              ")
     print("================================================================================")
-    print("  🚀 CHIP-8 CYBERPUNK STUDIO, VISUAL DEBUGGER & DISASSEMBLER in DBYTE v12       ")
+    print("  DBYTE CHIP-8 SDK: COMPILER, ASSEMBLER, VM, TRACER, PATCHER & ANALYZER v12     ")
     print("================================================================================")
     return 0
 
@@ -26,23 +33,64 @@ fn run_disassembler(path: str) -> int:
         print("[Error] ROM file not found:", path)
         return 0
     let data: bytes = fs.read_bytes(path)
-    let length: int = len(data)
-    print("----------------------------------------------------------------")
-    print(" DISASSEMBLY OF: " + path)
-    print("----------------------------------------------------------------")
+    let dbuf: buffer = buf.from_bytes(data)
+    let length: int = buf.len(dbuf)
+    print("--------------------------------------------------------------------------------")
+    print(" STATIC DISASSEMBLY OF: " + path)
+    print("--------------------------------------------------------------------------------")
     print("ADDR    HEX     INSTRUCTION")
     print("----    ----    -----------")
     let i: int = 0
     while i < length - 1:
-        let hi: int = data[i]
-        let lo: int = data[i + 1]
+        let hi: int = buf.get(dbuf, i)
+        let lo: int = buf.get(dbuf, i + 1)
         let op: int = hi * 256 + lo
         let addr_str: str = "0x" + bits.hex_u16(0x200 + i)
         let hex_str: str = bits.hex_u16(op)
         let instr: str = disasm.disassemble_op(op)
         print(addr_str + "  " + hex_str + "    " + instr)
         i = i + 2
-    print("----------------------------------------------------------------")
+    print("================================================================================")
+    return 0
+
+fn run_emulator_clean(path: str, max_cycles: int) -> int:
+    if fs.exists(path) == 0:
+        print("[Error] File not found:", path)
+        return 0
+
+    let rom_bytes: bytes = fs.read_bytes(path)
+    let mem: buffer = chip8.create_memory()
+    let v: buffer = chip8.create_v()
+    let stack: buffer = chip8.create_stack()
+    let gfx: buffer = chip8.create_gfx()
+    let keys: buffer = chip8.create_keys()
+    let state: buffer = chip8.create_state()
+    let rng_seed: int = 987654321
+
+    chip8.load_fontset(mem)
+    let loaded: int = chip8.load_rom_bytes(mem, rom_bytes)
+    print("[+] Loaded ROM: " + path + " (" + bits.hex_u16(loaded) + " bytes into 0x0200)")
+    print("[+] Executing " + bits.hex_u16(max_cycles) + " CPU cycles...")
+
+    let cycle: int = 0
+    let running: int = 1
+    while running == 1:
+        if cycle >= max_cycles:
+            running = 0
+        else:
+            if chip8.get_halted(state) == 1:
+                running = 0
+            else:
+                rng_seed = chip8.step(mem, v, stack, gfx, keys, state, rng_seed)
+                if cycle % 10 == 0:
+                    chip8.tick_timers(state)
+                cycle = cycle + 1
+
+    print("================================================================================")
+    print(" [FRAMEBUFFER OUTPUT AT CYCLE " + bits.hex_u16(cycle) + "]")
+    print("================================================================================")
+    display.render_framebuffer_clean(gfx)
+    print("Execution complete. Final PC: 0x" + bits.hex_u16(chip8.get_pc(state)) + " | Cycles: " + bits.hex_u16(cycle))
     return 0
 
 fn run_studio_mode(rom_data: bytes, title: str, max_cycles: int) -> int:
@@ -68,11 +116,9 @@ fn run_studio_mode(rom_data: bytes, title: str, max_cycles: int) -> int:
                 running = 0
             else:
                 rng_seed = chip8.step(mem, v, stack, gfx, keys, state, rng_seed)
-                
                 if cycle % 10 == 0:
                     chip8.tick_timers(state)
 
-                # Update studio dashboard periodically or on draw
                 if chip8.get_draw_flag(state) == 1:
                     chip8.set_draw_flag(state, 0)
                     tui.render_studio_dashboard(mem, v, stack, gfx, keys, state, title, cycle)
@@ -89,24 +135,123 @@ pub fn main() -> int:
     let arg_count: int = len(args)
 
     if arg_count == 0:
-        print("🎮 Available Commands & Modes:")
-        print("  dbyte run src/main.dby studio pong      - 🕹️ Launch Pong in Cyberpunk Studio")
-        print("  dbyte run src/main.dby studio maze      - 🌀 Launch Maze Generator in Studio")
-        print("  dbyte run src/main.dby studio ibm       - 🏢 Launch IBM Logo in Studio")
-        print("  dbyte run src/main.dby studio brix      - 🧱 Launch Brix Breakout in Studio")
-        print("  dbyte run src/main.dby disasm <rom.ch8> - 🔍 Disassemble binary ROM into x86/CHIP8 asm")
-        print("  dbyte run src/main.dby run <rom.ch8>    - ▶️ Run custom external ROM file")
-        print("  dbyte run src/main.dby export           - 📦 Export all bundled ROMs to roms/")
+        print("  Available SDK Toolchain Commands:")
+        print("    dbyte run src/main.dby asm SRC.dasm OUT.ch8     Two-Pass Assembly Compiler")
+        print("    dbyte run src/main.dby compile SRC.c OUT.ch8    High-Level Script Compiler")
+        print("    dbyte run src/main.dby trace ROM_FILE [N]       Step-by-Step Instruction & Register Tracer")
+        print("    dbyte run src/main.dby diff ROM1 ROM2           Binary Disassembly Comparator")
+        print("    dbyte run src/main.dby patch ROM OFF BYTE OUT   Binary Memory Modder & Patcher")
+        print("    dbyte run src/main.dby inspect ROM_FILE         Full Static Binary Analysis & Sprite Extractor")
+        print("    dbyte run src/main.dby disasm ROM_FILE          Static Disassembler & Opcode Analysis")
+        print("    dbyte run src/main.dby run ROM_FILE             Run ROM with clean 64x32 Framebuffer output")
+        print("    dbyte run src/main.dby hexdump ROM_FILE         Canonical 16-byte Hex + ASCII Inspector")
+        print("    dbyte run src/main.dby entropy ROM_FILE         Shannon Entropy Density Scanner")
+        print("    dbyte run src/main.dby studio NAME              Launch Cyberpunk TUI Studio (pong/brix/maze/ibm)")
+        print("    dbyte run src/main.dby export                   Export all built-in ROM files to roms/")
         print("")
-        print("[Defaulting to launching Pong in Cyberpunk Studio...]")
-        run_studio_mode(roms.get_pong_bytes(), "PONG (Classic 2P)", 60)
+        print("  Examples:")
+        print("    dbyte run src/main.dby asm examples/snake.dasm roms/snake.ch8")
+        print("    dbyte run src/main.dby compile examples/flappy.c roms/flappy.ch8")
+        print("    dbyte run src/main.dby trace roms/snake.ch8 15")
+        print("    dbyte run src/main.dby diff roms/maze.ch8 roms/pong.ch8")
         return 0
 
     let cmd: str = args[0]
 
+    if cmd == "asm":
+        if arg_count < 3:
+            print("[Error] Usage: dbyte run src/main.dby asm <source.dasm> <output.ch8>")
+            return 0
+        assembler.compile_asm_file(args[1], args[2])
+        return 0
+
+    if cmd == "compile":
+        if arg_count < 3:
+            print("[Error] Usage: dbyte run src/main.dby compile <source.c> <output.ch8>")
+            return 0
+        c_compiler.compile_high_level(args[1], args[2])
+        return 0
+
+    if cmd == "trace":
+        if arg_count < 2:
+            print("[Error] Please specify ROM file path to trace.")
+            return 0
+        if fs.exists(args[1]) == 0:
+            print("[Error] File not found:", args[1])
+            return 0
+        let data: bytes = fs.read_bytes(args[1])
+        debugger.run_step_debugger(data, args[1], 20)
+        return 0
+
+    if cmd == "diff":
+        if arg_count < 3:
+            print("[Error] Usage: dbyte run src/main.dby diff <rom1.ch8> <rom2.ch8>")
+            return 0
+        patcher.diff_roms(args[1], args[2])
+        return 0
+
+    if cmd == "patch":
+        if arg_count < 5:
+            print("[Error] Usage: dbyte run src/main.dby patch <rom.ch8> <offset_hex> <byte_hex> <out.ch8>")
+            return 0
+        let off: int = bits.parse_hex_str(args[2])
+        let pbyte: int = bits.parse_hex_str(args[3])
+        patcher.patch_rom_byte(args[1], off, pbyte, args[4])
+        return 0
+
     if cmd == "export":
         roms.export_bundled_roms("roms")
         print("[OK] Exported: ibm_logo.ch8, maze.ch8, pong.ch8, brix.ch8, starfield.ch8 into roms/")
+        return 0
+
+    if cmd == "run":
+        if arg_count < 2:
+            print("[Error] Please specify ROM file path.")
+            return 0
+        run_emulator_clean(args[1], 300)
+        return 0
+
+    if cmd == "inspect":
+        if arg_count < 2:
+            print("[Error] Please specify ROM file path to inspect.")
+            return 0
+        if fs.exists(args[1]) == 0:
+            print("[Error] File not found:", args[1])
+            return 0
+        let data: bytes = fs.read_bytes(args[1])
+        let dbuf: buffer = buf.from_bytes(data)
+        analyzer.analyze_rom(dbuf, args[1])
+        return 0
+
+    if cmd == "disasm":
+        if arg_count < 2:
+            print("[Error] Please specify ROM file path to disassemble.")
+            return 0
+        run_disassembler(args[1])
+        return 0
+
+    if cmd == "hexdump":
+        if arg_count < 2:
+            print("[Error] Please specify file path.")
+            return 0
+        if fs.exists(args[1]) == 0:
+            print("[Error] File not found:", args[1])
+            return 0
+        let data: bytes = fs.read_bytes(args[1])
+        let dbuf: buffer = buf.from_bytes(data)
+        hexdump.hexdump(dbuf, 0, buf.len(dbuf))
+        return 0
+
+    if cmd == "entropy":
+        if arg_count < 2:
+            print("[Error] Please specify file path.")
+            return 0
+        if fs.exists(args[1]) == 0:
+            print("[Error] File not found:", args[1])
+            return 0
+        let data: bytes = fs.read_bytes(args[1])
+        let dbuf: buffer = buf.from_bytes(data)
+        entropy.scan_entropy(dbuf, 16)
         return 0
 
     if cmd == "studio":
@@ -130,25 +275,6 @@ pub fn main() -> int:
             run_studio_mode(roms.get_starfield_bytes(), "Starfield Demo", 100)
             return 0
         print("Unknown demo:", demo_name)
-        return 0
-
-    if cmd == "disasm":
-        if arg_count < 2:
-            print("Please specify ROM file path to disassemble.")
-            return 0
-        run_disassembler(args[1])
-        return 0
-
-    if cmd == "run":
-        if arg_count < 2:
-            print("Please specify ROM file path to run.")
-            return 0
-        let path: str = args[1]
-        if fs.exists(path) == 0:
-            print("[Error] File not found:", path)
-            return 0
-        let rom_bytes: bytes = fs.read_bytes(path)
-        run_studio_mode(rom_bytes, path, 500)
         return 0
 
     print("Unknown command:", cmd)
