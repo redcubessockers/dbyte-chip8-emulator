@@ -1,0 +1,90 @@
+import std.buffer as buf
+import "./bits.dby" as bits
+import "./chip8.dby" as chip8
+import "./disasm.dby" as disasm
+
+pub fn render_studio_dashboard(mem: buffer, v: buffer, stack: buffer, gfx: buffer, keys: buffer, state: buffer, title: str, cycle: int) -> int:
+    let pc_val: int = chip8.get_pc(state)
+    let i_val: int = chip8.get_i(state)
+    let sp_val: int = chip8.get_sp(state)
+    let dt_val: int = chip8.get_dt(state)
+    let st_val: int = chip8.get_st(state)
+
+    print("================================================================================")
+    print(" 🕹️  DBYTE CHIP-8 CYBERPUNK STUDIO │ ROM:", title, "│ CYCLE:", cycle)
+    print("================================================================================")
+    print("┌─ 📺 FRAMEBUFFER (64x32 DOWNSAMPLED) ─┐ ┌─ ⚡ REGISTERS (V0 - VF) & CPU ──────┐")
+    
+    let y: int = 0
+    while y < 16:
+        let gline: str = "│ "
+        let x: int = 0
+        while x < 36:
+            let p1: int = buf.get(gfx, (y * 2) * 64 + (x * 64 / 36))
+            let p2: int = buf.get(gfx, (y * 2 + 1) * 64 + (x * 64 / 36))
+            if p1 == 1:
+                if p2 == 1:
+                    gline = gline + "█"
+                else:
+                    gline = gline + "▀"
+            else:
+                if p2 == 1:
+                    gline = gline + "▄"
+                else:
+                    gline = gline + " "
+            x = x + 1
+        gline = gline + " │"
+
+        # Register side column
+        let rline: str = " │"
+        if y == 0:
+            rline = " │ V0: 0x" + bits.hex_u8(buf.get(v, 0)) + "  V4: 0x" + bits.hex_u8(buf.get(v, 4)) + "  V8: 0x" + bits.hex_u8(buf.get(v, 8)) + "  VC: 0x" + bits.hex_u8(buf.get(v, 12)) + " │"
+        if y == 1:
+            rline = " │ V1: 0x" + bits.hex_u8(buf.get(v, 1)) + "  V5: 0x" + bits.hex_u8(buf.get(v, 5)) + "  V9: 0x" + bits.hex_u8(buf.get(v, 9)) + "  VD: 0x" + bits.hex_u8(buf.get(v, 13)) + " │"
+        if y == 2:
+            rline = " │ V2: 0x" + bits.hex_u8(buf.get(v, 2)) + "  V6: 0x" + bits.hex_u8(buf.get(v, 6)) + "  VA: 0x" + bits.hex_u8(buf.get(v, 10)) + "  VE: 0x" + bits.hex_u8(buf.get(v, 14)) + " │"
+        if y == 3:
+            rline = " │ V3: 0x" + bits.hex_u8(buf.get(v, 3)) + "  V7: 0x" + bits.hex_u8(buf.get(v, 7)) + "  VB: 0x" + bits.hex_u8(buf.get(v, 11)) + "  VF: 0x" + bits.hex_u8(buf.get(v, 15)) + " │"
+        if y == 4:
+            rline = " ├─────────────────────────────────────────┤"
+        if y == 5:
+            rline = " │ PC: 0x" + bits.hex_u16(pc_val) + "   I: 0x" + bits.hex_u16(i_val) + "    SP: 0x" + bits.hex_u8(sp_val) + "     │"
+        if y == 6:
+            rline = " │ DT: 0x" + bits.hex_u8(dt_val) + "     ST: 0x" + bits.hex_u8(st_val) + "     HALT: " + bits.hex_nibble(chip8.get_halted(state)) + "    │"
+        if y == 7:
+            let st0: str = "0x" + bits.hex_u16(buf.get(stack, 0) * 256 + buf.get(stack, 1))
+            let st1: str = "0x" + bits.hex_u16(buf.get(stack, 2) * 256 + buf.get(stack, 3))
+            rline = " │ STACK: [" + st0 + ", " + st1 + "]       │"
+        if y == 8:
+            rline = " ├─ 🔍 MEMORY INSPECTOR (PC OFFSET) ───────┤"
+        if y == 9:
+            let m0: str = bits.hex_u8(buf.get(mem, pc_val))
+            let m1: str = bits.hex_u8(buf.get(mem, pc_val + 1))
+            let m2: str = bits.hex_u8(buf.get(mem, pc_val + 2))
+            let m3: str = bits.hex_u8(buf.get(mem, pc_val + 3))
+            rline = " │ 0x" + bits.hex_u16(pc_val) + ": " + m0 + " " + m1 + " " + m2 + " " + m3 + "                 │"
+        if y == 10:
+            let m4: str = bits.hex_u8(buf.get(mem, pc_val + 4))
+            let m5: str = bits.hex_u8(buf.get(mem, pc_val + 5))
+            let m6: str = bits.hex_u8(buf.get(mem, pc_val + 6))
+            let m7: str = bits.hex_u8(buf.get(mem, pc_val + 7))
+            rline = " │ 0x" + bits.hex_u16(pc_val + 4) + ": " + m4 + " " + m5 + " " + m6 + " " + m7 + "                 │"
+        if y >= 11:
+            rline = " │                                         │"
+
+        print(gline + rline)
+        y = y + 1
+
+    print("└──────────────────────────────────────┘ └─────────────────────────────────────────┘")
+    print("┌─ 📜 CURRENT INSTRUCTION PIPELINE ───────────────────────────────────────────┐")
+    if pc_val < 4094:
+        let op_now: int = buf.get(mem, pc_val) * 256 + buf.get(mem, pc_val + 1)
+        let op_next: int = buf.get(mem, pc_val + 2) * 256 + buf.get(mem, pc_val + 3)
+        let dis_now: str = disasm.disassemble_op(op_now)
+        let dis_next: str = disasm.disassemble_op(op_next)
+        print("│  >>> [EXEC]  0x" + bits.hex_u16(pc_val) + " : " + bits.hex_u16(op_now) + "  " + dis_now)
+        print("│      [NEXT]  0x" + bits.hex_u16(pc_val + 2) + " : " + bits.hex_u16(op_next) + "  " + dis_next)
+    else:
+        print("│  >>> [EXEC]  HALTED AT END OF MEMORY                                        │")
+    print("└─────────────────────────────────────────────────────────────────────────────┘")
+    return 0

@@ -1,0 +1,112 @@
+import "./bits.dby" as bits
+
+pub fn disassemble_op(op: int) -> str:
+    let opt: int = bits.op_type(op)
+    let x: int = bits.reg_x(op)
+    let y: int = bits.reg_y(op)
+    let n: int = bits.nibble_n(op)
+    let nn: int = bits.byte_nn(op)
+    let nnn: int = bits.addr_nnn(op)
+
+    let vx: str = "V" + bits.hex_nibble(x)
+    let vy: str = "V" + bits.hex_nibble(y)
+    let hex_nn: str = "0x" + bits.hex_u8(nn)
+    let hex_nnn: str = "0x" + bits.hex_u16(nnn)
+
+    if opt == 0:
+        if op == 0x00E0:
+            return "CLS"
+        if op == 0x00EE:
+            return "RET"
+        return "SYS " + hex_nnn
+
+    if opt == 1:
+        return "JP " + hex_nnn
+
+    if opt == 2:
+        return "CALL " + hex_nnn
+
+    if opt == 3:
+        return "SE " + vx + ", " + hex_nn
+
+    if opt == 4:
+        return "SNE " + vx + ", " + hex_nn
+
+    if opt == 5:
+        if n == 0:
+            return "SE " + vx + ", " + vy
+        return "DATA " + bits.hex_u16(op)
+
+    if opt == 6:
+        return "LD " + vx + ", " + hex_nn
+
+    if opt == 7:
+        return "ADD " + vx + ", " + hex_nn
+
+    if opt == 8:
+        if n == 0:
+            return "LD " + vx + ", " + vy
+        if n == 1:
+            return "OR " + vx + ", " + vy
+        if n == 2:
+            return "AND " + vx + ", " + vy
+        if n == 3:
+            return "XOR " + vx + ", " + vy
+        if n == 4:
+            return "ADD " + vx + ", " + vy
+        if n == 5:
+            return "SUB " + vx + ", " + vy
+        if n == 6:
+            return "SHR " + vx
+        if n == 7:
+            return "SUBN " + vx + ", " + vy
+        if n == 14:
+            return "SHL " + vx
+        return "DATA " + bits.hex_u16(op)
+
+    if opt == 9:
+        if n == 0:
+            return "SNE " + vx + ", " + vy
+        return "DATA " + bits.hex_u16(op)
+
+    if opt == 10:
+        return "LD I, " + hex_nnn
+
+    if opt == 11:
+        return "JP V0, " + hex_nnn
+
+    if opt == 12:
+        return "RND " + vx + ", " + hex_nn
+
+    if opt == 13:
+        return "DRW " + vx + ", " + vy + ", " + bits.hex_nibble(n)
+
+    if opt == 14:
+        if nn == 0x9E:
+            return "SKP " + vx
+        if nn == 0xA1:
+            return "SKNP " + vx
+        return "DATA " + bits.hex_u16(op)
+
+    if opt == 15:
+        if nn == 0x07:
+            return "LD " + vx + ", DT"
+        if nn == 0x0A:
+            return "LD " + vx + ", K"
+        if nn == 0x15:
+            return "LD DT, " + vx
+        if nn == 0x18:
+            return "LD ST, " + vx
+        if nn == 0x1E:
+            return "ADD I, " + vx
+        if nn == 0x29:
+            return "LD F, " + vx
+        if nn == 0x33:
+            return "LD B, " + vx
+        if nn == 0x55:
+            return "LD [I], " + vx
+        if nn == 0x65:
+            return "LD " + vx + ", [I]"
+        return "DATA " + bits.hex_u16(op)
+
+    return "DATA " + bits.hex_u16(op)

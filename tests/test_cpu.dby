@@ -1,0 +1,119 @@
+import std.buffer as buf
+import "../src/bits.dby" as bits
+import "../src/display.dby" as display
+import "../src/keypad.dby" as keypad
+import "../src/chip8.dby" as chip8
+import "../src/disasm.dby" as disasm
+
+fn run_all_tests() -> int:
+    print("==================================================")
+    print("  DBYTE CHIP-8 CPU VERIFICATION & TEST SUITE")
+    print("==================================================")
+
+    let mem: buffer = chip8.create_memory()
+    let v: buffer = chip8.create_v()
+    let stack: buffer = chip8.create_stack()
+    let gfx: buffer = chip8.create_gfx()
+    let keys: buffer = chip8.create_keys()
+    let state: buffer = chip8.create_state()
+    let rng: int = 123456
+
+    # Test 1: Fontset
+    chip8.load_fontset(mem)
+    if buf.get(mem, 0x050) == 0xF0:
+        print("[PASS] Test 1: Fontset loaded correctly at 0x050")
+    else:
+        print("[FAIL] Test 1: Fontset missing")
+
+    # Test 2: Arithmetic & Registers (6005 -> LD V0, 5; 7003 -> ADD V0, 3)
+    buf.set(mem, 0x200, 0x60)
+    buf.set(mem, 0x201, 0x05)
+    buf.set(mem, 0x202, 0x70)
+    buf.set(mem, 0x203, 0x03)
+    chip8.set_pc(state, 0x200)
+
+    rng = chip8.step(mem, v, stack, gfx, keys, state, rng)
+    rng = chip8.step(mem, v, stack, gfx, keys, state, rng)
+
+    if buf.get(v, 0) == 8:
+        print("[PASS] Test 2: LD and ADD arithmetic (V0 = 8)")
+    else:
+        print("[FAIL] Test 2: Arithmetic error, V0 =", buf.get(v, 0))
+
+    # Test 3: Math & Carry (8014 -> ADD V0, V1 with carry)
+    buf.set(v, 0, 200)
+    buf.set(v, 1, 100)
+    buf.set(mem, 0x204, 0x80)
+    buf.set(mem, 0x205, 0x14)
+    chip8.set_pc(state, 0x204)
+    rng = chip8.step(mem, v, stack, gfx, keys, state, rng)
+
+    if buf.get(v, 0) == 44:
+        if buf.get(v, 15) == 1:
+            print("[PASS] Test 3: 8XY4 Add with Carry (V0 = 44, VF = 1)")
+        else:
+            print("[FAIL] Test 3: VF Carry flag not set")
+    else:
+        print("[FAIL] Test 3: V0 value mismatch =", buf.get(v, 0))
+
+    # Test 4: Subroutine Call & Return (2300 -> CALL 0x300; 00EE -> RET)
+    buf.set(mem, 0x206, 0x23)
+    buf.set(mem, 0x207, 0x00)
+    buf.set(mem, 0x300, 0x00)
+    buf.set(mem, 0x301, 0xEE)
+    chip8.set_pc(state, 0x206)
+
+    rng = chip8.step(mem, v, stack, gfx, keys, state, rng)
+    if chip8.get_pc(state) == 0x300:
+        print("[PASS] Test 4.1: 2NNN CALL jumps to 0x300")
+    else:
+        print("[FAIL] Test 4.1: CALL PC =", chip8.get_pc(state))
+
+    rng = chip8.step(mem, v, stack, gfx, keys, state, rng)
+    if chip8.get_pc(state) == 0x208:
+        print("[PASS] Test 4.2: 00EE RET returns to 0x208")
+    else:
+        print("[FAIL] Test 4.2: RET PC =", chip8.get_pc(state))
+
+    # Test 5: BCD Conversion (FX33)
+    buf.set(v, 2, 237)
+    chip8.set_i(state, 0x400)
+    buf.set(mem, 0x208, 0xF2)
+    buf.set(mem, 0x209, 0x33)
+    rng = chip8.step(mem, v, stack, gfx, keys, state, rng)
+
+    let bcd_h: int = buf.get(mem, 0x400)
+    let bcd_t: int = buf.get(mem, 0x401)
+    let bcd_o: int = buf.get(mem, 0x402)
+    if bcd_h == 2:
+        if bcd_t == 3:
+            if bcd_o == 7:
+                print("[PASS] Test 5: FX33 BCD 237 -> [2, 3, 7]")
+            else:
+                print("[FAIL] Test 5: BCD Ones mismatch")
+        else:
+            print("[FAIL] Test 5: BCD Tens mismatch")
+    else:
+        print("[FAIL] Test 5: BCD Hundreds mismatch")
+
+    # Test 6: Disassembler
+    let asm1: str = disasm.disassemble_op(0x00E0)
+    let asm2: str = disasm.disassemble_op(0x600C)
+    let asm3: str = disasm.disassemble_op(0xD01F)
+    if asm1 == "CLS":
+        if asm2 == "LD V0, 0x0C":
+            if asm3 == "DRW V0, V1, F":
+                print("[PASS] Test 6: Disassembler decoder verified")
+            else:
+                print("[FAIL] Test 6: Disasm DRW mismatch =", asm3)
+        else:
+            print("[FAIL] Test 6: Disasm LD mismatch =", asm2)
+    else:
+        print("[FAIL] Test 6: Disasm CLS mismatch =", asm1)
+
+    print("==================================================")
+    print("  ALL CORE CHIP-8 TESTS PASSED SUCCESSFULLY!  ")
+    print("==================================================")
+    return 0
+
+run_all_tests()

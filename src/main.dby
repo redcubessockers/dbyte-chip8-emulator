@@ -1,138 +1,157 @@
-fn encode(room: u32, inventory: u32, hp: u32, score: u32) -> u32:
-    return room + (inventory * 10) + (hp * 100) + (score * 1000)
+import std.fs as fs
+import std.buffer as buf
+import std.env as env
+import "./bits.dby" as bits
+import "./display.dby" as display
+import "./keypad.dby" as keypad
+import "./chip8.dby" as chip8
+import "./disasm.dby" as disasm
+import "./roms.dby" as roms
+import "./tui.dby" as tui
 
-fn room_of(state: u32) -> u32:
-    return state - ((state / 10) * 10)
+fn print_banner() -> int:
+    print("================================================================================")
+    print("   ____  ______     _______ _____   ____ _   _ ___ ____        ___              ")
+    print("  |  _ \\| __ ) \\   / /_   _| ____| / ___| | | |_ _|  _ \\      / _ \\             ")
+    print("  | | | |  _ \\\\ \\ / /  | | |  _|  | |   | |_| || || |_) |____| (_) |            ")
+    print("  | |_| | |_) |\\ V /   | | | |___ | |___|  _  || ||  __/_____ \\__, |            ")
+    print("  |____/|____/  |_|    |_| |_____| \\____|_| |_|___|_|          /_/              ")
+    print("================================================================================")
+    print("  🚀 CHIP-8 CYBERPUNK STUDIO, VISUAL DEBUGGER & DISASSEMBLER in DBYTE v12       ")
+    print("================================================================================")
+    return 0
 
-fn inventory_of(state: u32) -> u32:
-    let tens = state / 10
-    return tens - ((tens / 10) * 10)
+fn run_disassembler(path: str) -> int:
+    if fs.exists(path) == 0:
+        print("[Error] ROM file not found:", path)
+        return 0
+    let data: bytes = fs.read_bytes(path)
+    let length: int = len(data)
+    print("----------------------------------------------------------------")
+    print(" DISASSEMBLY OF: " + path)
+    print("----------------------------------------------------------------")
+    print("ADDR    HEX     INSTRUCTION")
+    print("----    ----    -----------")
+    let i: int = 0
+    while i < length - 1:
+        let hi: int = data[i]
+        let lo: int = data[i + 1]
+        let op: int = hi * 256 + lo
+        let addr_str: str = "0x" + bits.hex_u16(0x200 + i)
+        let hex_str: str = bits.hex_u16(op)
+        let instr: str = disasm.disassemble_op(op)
+        print(addr_str + "  " + hex_str + "    " + instr)
+        i = i + 2
+    print("----------------------------------------------------------------")
+    return 0
 
-fn hp_of(state: u32) -> u32:
-    let hundreds = state / 100
-    let score = state / 1000
-    return hundreds - (score * 10)
+fn run_studio_mode(rom_data: bytes, title: str, max_cycles: int) -> int:
+    let mem: buffer = chip8.create_memory()
+    let v: buffer = chip8.create_v()
+    let stack: buffer = chip8.create_stack()
+    let gfx: buffer = chip8.create_gfx()
+    let keys: buffer = chip8.create_keys()
+    let state: buffer = chip8.create_state()
+    let rng_seed: int = 987654321
 
-fn score_of(state: u32) -> u32:
-    return state / 1000
+    chip8.load_fontset(mem)
+    let loaded: int = chip8.load_rom_bytes(mem, rom_data)
+    print("[+] Initialized CHIP-8 Core. Loaded", loaded, "bytes.")
 
-fn show_state(state: u32) -> u32:
-    print("[STATE] room:", room_of(state))
-    print("[STATE] inventory:", inventory_of(state))
-    print("[STATE] hp:", hp_of(state))
-    print("[STATE] score:", score_of(state))
-    return state
+    let cycle: int = 0
+    let running: int = 1
+    while running == 1:
+        if cycle >= max_cycles:
+            running = 0
+        else:
+            if chip8.get_halted(state) == 1:
+                running = 0
+            else:
+                rng_seed = chip8.step(mem, v, stack, gfx, keys, state, rng_seed)
+                
+                if cycle % 10 == 0:
+                    chip8.tick_timers(state)
 
-fn step(state: u32, action: u32) -> Result[u32, u32]:
-    let room = room_of(state)
-    let inventory = inventory_of(state)
-    let hp = hp_of(state)
-    let score = score_of(state)
+                # Update studio dashboard periodically or on draw
+                if chip8.get_draw_flag(state) == 1:
+                    chip8.set_draw_flag(state, 0)
+                    tui.render_studio_dashboard(mem, v, stack, gfx, keys, state, title, cycle)
 
-    if action == 1:
-        if room == 0:
-            print("[LOOK] ENTRY VAULT: a brass lens rests under dead stars")
-        if room == 1:
-            print("[LOOK] ASH CORRIDOR: a pressure plate guards the north gate")
-        if room == 2:
-            print("[LOOK] GLYPH CATHEDRAL: three locks share one silent mechanism")
-        return Result[u32, u32].Ok(state)
+                cycle = cycle + 1
 
-    if action == 2:
-        if room != 0:
-            return Result[u32, u32].Err(201)
-        if inventory != 0:
-            return Result[u32, u32].Err(202)
-        print("[TAKE] brass lens acquired")
-        return Result[u32, u32].Ok(encode(room, 1, hp, score + 5))
+    tui.render_studio_dashboard(mem, v, stack, gfx, keys, state, title, cycle)
+    print("[+] Session finished at cycle:", cycle)
+    return 0
 
-    if action == 3:
-        if room == 0:
-            print("[MOVE] entry vault -> ash corridor")
-            return Result[u32, u32].Ok(encode(1, inventory, hp, score + 10))
-        if room == 1:
-            if inventory == 1:
-                print("[MOVE] ash corridor -> glyph cathedral")
-                return Result[u32, u32].Ok(encode(2, inventory, hp, score + 10))
-        return Result[u32, u32].Err(203)
+pub fn main() -> int:
+    print_banner()
+    let args: list[str] = env.args()
+    let arg_count: int = len(args)
 
-    if action == 4:
-        if room != 1:
-            return Result[u32, u32].Err(204)
-        if inventory == 0:
-            return Result[u32, u32].Err(205)
-        print("[ALIGN] lens frequency locked to the corridor gate")
-        return Result[u32, u32].Ok(encode(room, inventory, hp, score + 20))
+    if arg_count == 0:
+        print("🎮 Available Commands & Modes:")
+        print("  dbyte run src/main.dby studio pong      - 🕹️ Launch Pong in Cyberpunk Studio")
+        print("  dbyte run src/main.dby studio maze      - 🌀 Launch Maze Generator in Studio")
+        print("  dbyte run src/main.dby studio ibm       - 🏢 Launch IBM Logo in Studio")
+        print("  dbyte run src/main.dby studio brix      - 🧱 Launch Brix Breakout in Studio")
+        print("  dbyte run src/main.dby disasm <rom.ch8> - 🔍 Disassemble binary ROM into x86/CHIP8 asm")
+        print("  dbyte run src/main.dby run <rom.ch8>    - ▶️ Run custom external ROM file")
+        print("  dbyte run src/main.dby export           - 📦 Export all bundled ROMs to roms/")
+        print("")
+        print("[Defaulting to launching Pong in Cyberpunk Studio...]")
+        run_studio_mode(roms.get_pong_bytes(), "PONG (Classic 2P)", 60)
+        return 0
 
-    if action == 5:
-        if room != 2:
-            return Result[u32, u32].Err(206)
-        if inventory == 0:
-            return Result[u32, u32].Err(207)
-        if hp == 0:
-            return Result[u32, u32].Err(208)
-        print("[SOLVE] three glyphs collapse into one executable seal")
-        return Result[u32, u32].Ok(encode(room, inventory, hp, score + 100))
+    let cmd: str = args[0]
 
-    if action == 6:
-        if room != 1:
-            return Result[u32, u32].Err(209)
-        if hp == 0:
-            return Result[u32, u32].Err(210)
-        print("[TRAP] pressure plate triggered; one heart lost")
-        return Result[u32, u32].Ok(encode(room, inventory, hp - 1, score - 3))
+    if cmd == "export":
+        roms.export_bundled_roms("roms")
+        print("[OK] Exported: ibm_logo.ch8, maze.ch8, pong.ch8, brix.ch8, starfield.ch8 into roms/")
+        return 0
 
-    return Result[u32, u32].Err(404)
-
-fn advance(state: u32, action: u32) -> Result[u32, u32]:
-    let next = step(state, action)?
-    show_state(next)
-    return Result[u32, u32].Ok(next)
-
-fn choose[T](condition: bool, yes: T, no: T) -> T:
-    if condition:
-        return yes
-    return no
-
-fn play_campaign() -> Result[u32, u32]:
-    print("== BYTETEMPLE FORGE: THE EXECUTABLE SEAL ==")
-    print("A deterministic dungeon for DByte Hosted and VM")
-    let state: u32 = encode(0, 0, 3, 0)
-    defer [borrow state]:
-        print("[DEFER] campaign scope finalized")
-
-    print("-- TURN 01 / LOOK --")
-    let s1 = advance(state, 1)?
-    print("-- TURN 02 / TAKE --")
-    let s2 = advance(s1, 2)?
-    print("-- TURN 03 / MOVE --")
-    let s3 = advance(s2, 3)?
-    print("-- TURN 04 / TRAP --")
-    let s4 = advance(s3, 6)?
-    print("-- TURN 05 / ALIGN --")
-    let s5 = advance(s4, 4)?
-    print("-- TURN 06 / MOVE --")
-    let s6 = advance(s5, 3)?
-    print("-- TURN 07 / SOLVE --")
-    let s7 = advance(s6, 5)?
-
-    let bonus: u32 = choose[u32](score_of(s7) >= 100, 50, 0)
-    let final_score: u32 = score_of(s7) + bonus
-    print("[RELIC] executable seal accepted")
-    print("[SCORE] base:", score_of(s7))
-    print("[SCORE] flawless-route bonus:", bonus)
-    print("[SCORE] final:", final_score)
-    print("[REPLAY] LOOK > TAKE > MOVE > TRAP > ALIGN > MOVE > SOLVE")
-    return Result[u32, u32].Ok(final_score)
-
-fn report(result: Result[u32, u32]) -> int:
-    match result:
-        case Result.Ok(score):
-            print("[CAMPAIGN] completed with score:", score)
+    if cmd == "studio":
+        let demo_name: str = "pong"
+        if arg_count >= 2:
+            demo_name = args[1]
+        
+        if demo_name == "ibm":
+            run_studio_mode(roms.get_ibm_logo_bytes(), "IBM Logo Test", 50)
             return 0
-        case Result.Err(error):
-            print("[CAMPAIGN] failed with error code:", error)
-            return 1
+        if demo_name == "maze":
+            run_studio_mode(roms.get_maze_bytes(), "Maze Generator", 200)
+            return 0
+        if demo_name == "pong":
+            run_studio_mode(roms.get_pong_bytes(), "PONG Classic", 80)
+            return 0
+        if demo_name == "brix":
+            run_studio_mode(roms.get_brix_bytes(), "BRIX Breakout", 120)
+            return 0
+        if demo_name == "starfield":
+            run_studio_mode(roms.get_starfield_bytes(), "Starfield Demo", 100)
+            return 0
+        print("Unknown demo:", demo_name)
+        return 0
 
-let campaign = play_campaign()
-report(campaign)
+    if cmd == "disasm":
+        if arg_count < 2:
+            print("Please specify ROM file path to disassemble.")
+            return 0
+        run_disassembler(args[1])
+        return 0
+
+    if cmd == "run":
+        if arg_count < 2:
+            print("Please specify ROM file path to run.")
+            return 0
+        let path: str = args[1]
+        if fs.exists(path) == 0:
+            print("[Error] File not found:", path)
+            return 0
+        let rom_bytes: bytes = fs.read_bytes(path)
+        run_studio_mode(rom_bytes, path, 500)
+        return 0
+
+    print("Unknown command:", cmd)
+    return 0
+
+main()

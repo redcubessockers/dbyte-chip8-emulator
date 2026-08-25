@@ -1,0 +1,446 @@
+import std.buffer as buf
+import std.fs as fs
+import "./bits.dby" as bits
+import "./display.dby" as display
+import "./keypad.dby" as keypad
+
+pub fn create_memory() -> buffer:
+    return buf.new(4096)
+
+pub fn create_v() -> buffer:
+    return buf.new(16)
+
+pub fn create_stack() -> buffer:
+    return buf.new(32)
+
+pub fn create_gfx() -> buffer:
+    return buf.new(2048)
+
+pub fn create_keys() -> buffer:
+    return buf.new(16)
+
+pub fn create_state() -> buffer:
+    let s: buffer = buf.new(16)
+    # pc = 0x0200 = 512
+    buf.set(s, 0, 2)
+    buf.set(s, 1, 0)
+    # i = 0
+    buf.set(s, 2, 0)
+    buf.set(s, 3, 0)
+    # sp = 0
+    buf.set(s, 4, 0)
+    # dt = 0
+    buf.set(s, 5, 0)
+    # st = 0
+    buf.set(s, 6, 0)
+    # draw_flag = 0
+    buf.set(s, 7, 0)
+    # halted = 0
+    buf.set(s, 8, 0)
+    return s
+
+pub fn get_pc(s: buffer) -> int:
+    return buf.get(s, 0) * 256 + buf.get(s, 1)
+
+pub fn set_pc(s: buffer, val: int) -> int:
+    let v: int = val % 65536
+    buf.set(s, 0, v / 256)
+    buf.set(s, 1, v % 256)
+    return 0
+
+pub fn get_i(s: buffer) -> int:
+    return buf.get(s, 2) * 256 + buf.get(s, 3)
+
+pub fn set_i(s: buffer, val: int) -> int:
+    let v: int = val % 65536
+    buf.set(s, 2, v / 256)
+    buf.set(s, 3, v % 256)
+    return 0
+
+pub fn get_sp(s: buffer) -> int:
+    return buf.get(s, 4)
+
+pub fn set_sp(s: buffer, val: int) -> int:
+    buf.set(s, 4, val % 16)
+    return 0
+
+pub fn get_dt(s: buffer) -> int:
+    return buf.get(s, 5)
+
+pub fn set_dt(s: buffer, val: int) -> int:
+    buf.set(s, 5, val % 256)
+    return 0
+
+pub fn get_st(s: buffer) -> int:
+    return buf.get(s, 6)
+
+pub fn set_st(s: buffer, val: int) -> int:
+    buf.set(s, 6, val % 256)
+    return 0
+
+pub fn get_draw_flag(s: buffer) -> int:
+    return buf.get(s, 7)
+
+pub fn set_draw_flag(s: buffer, val: int) -> int:
+    buf.set(s, 7, val % 2)
+    return 0
+
+pub fn get_halted(s: buffer) -> int:
+    return buf.get(s, 8)
+
+pub fn set_halted(s: buffer, val: int) -> int:
+    buf.set(s, 8, val % 2)
+    return 0
+
+pub fn next_random(seed: int) -> int:
+    let next: int = (seed * 1103515245 + 12345) % 2147483648
+    if next < 0:
+        next = 0 - next
+    return next
+
+pub fn load_fontset(mem: buffer) -> int:
+    let font: bytes = b"\xF0\x90\x90\x90\xF0\x20\x60\x20\x20\x70\xF0\x10\xF0\x80\xF0\xF0\x10\xF0\x10\xF0\x90\x90\xF0\x10\x10\xF0\x80\xF0\x10\xF0\xF0\x80\xF0\x90\xF0\xF0\x10\x20\x40\x40\xF0\x90\xF0\x90\xF0\xF0\x90\xF0\x10\xF0\xF0\x90\xF0\x90\x90\xE0\x90\xE0\x90\xE0\xF0\x80\x80\x80\xF0\xE0\x90\x90\x90\xE0\xF0\x80\xF0\x80\xF0\xF0\x80\xF0\x80\x80"
+    let i: int = 0
+    while i < 80:
+        buf.set(mem, 0x050 + i, font[i])
+        i = i + 1
+    return 0
+
+pub fn load_rom_bytes(mem: buffer, rom: bytes) -> int:
+    let rom_len: int = len(rom)
+    let i: int = 0
+    while i < rom_len:
+        if 0x200 + i < 4096:
+            buf.set(mem, 0x200 + i, rom[i])
+        i = i + 1
+    return rom_len
+
+pub fn load_rom_file(mem: buffer, path: str) -> int:
+    if fs.exists(path) == 0:
+        return 0 - 1
+    let rom_data: bytes = fs.read_bytes(path)
+    return load_rom_bytes(mem, rom_data)
+
+pub fn step(mem: buffer, v: buffer, stack: buffer, gfx: buffer, keys: buffer, state: buffer, rng_seed: int) -> int:
+    let pc: int = get_pc(state)
+    if pc >= 4094:
+        set_halted(state, 1)
+        return rng_seed
+
+    let hi: int = buf.get(mem, pc)
+    let lo: int = buf.get(mem, pc + 1)
+    let op: int = hi * 256 + lo
+
+    let opt: int = bits.op_type(op)
+    let x: int = bits.reg_x(op)
+    let y: int = bits.reg_y(op)
+    let n: int = bits.nibble_n(op)
+    let nn: int = bits.byte_nn(op)
+    let nnn: int = bits.addr_nnn(op)
+
+    # 00E0 / 00EE / 0NNN
+    if opt == 0:
+        if op == 0x00E0:
+            display.clear(gfx)
+            set_draw_flag(state, 1)
+            set_pc(state, pc + 2)
+            return rng_seed
+        if op == 0x00EE:
+            let sp: int = get_sp(state)
+            if sp > 0:
+                sp = sp - 1
+                set_sp(state, sp)
+                let ret_pc: int = buf.get(stack, sp * 2) * 256 + buf.get(stack, sp * 2 + 1)
+                set_pc(state, ret_pc + 2)
+            else:
+                set_pc(state, pc + 2)
+            return rng_seed
+        # 0NNN is SYS call
+        set_pc(state, pc + 2)
+        return rng_seed
+
+    # 1NNN: JP addr
+    if opt == 1:
+        set_pc(state, nnn)
+        return rng_seed
+
+    # 2NNN: CALL addr
+    if opt == 2:
+        let sp: int = get_sp(state)
+        if sp < 16:
+            buf.set(stack, sp * 2, pc / 256)
+            buf.set(stack, sp * 2 + 1, pc % 256)
+            set_sp(state, sp + 1)
+            set_pc(state, nnn)
+        else:
+            set_pc(state, pc + 2)
+        return rng_seed
+
+    # 3XNN: SE Vx, byte
+    if opt == 3:
+        if buf.get(v, x) == nn:
+            set_pc(state, pc + 4)
+        else:
+            set_pc(state, pc + 2)
+        return rng_seed
+
+    # 4XNN: SNE Vx, byte
+    if opt == 4:
+        if buf.get(v, x) != nn:
+            set_pc(state, pc + 4)
+        else:
+            set_pc(state, pc + 2)
+        return rng_seed
+
+    # 5XY0: SE Vx, Vy
+    if opt == 5:
+        if buf.get(v, x) == buf.get(v, y):
+            set_pc(state, pc + 4)
+        else:
+            set_pc(state, pc + 2)
+        return rng_seed
+
+    # 6XNN: LD Vx, byte
+    if opt == 6:
+        buf.set(v, x, nn)
+        set_pc(state, pc + 2)
+        return rng_seed
+
+    # 7XNN: ADD Vx, byte
+    if opt == 7:
+        let current: int = buf.get(v, x)
+        buf.set(v, x, (current + nn) % 256)
+        set_pc(state, pc + 2)
+        return rng_seed
+
+    # 8XY_: Math and bitwise operations
+    if opt == 8:
+        if n == 0:
+            # LD Vx, Vy
+            buf.set(v, x, buf.get(v, y))
+            set_pc(state, pc + 2)
+            return rng_seed
+        if n == 1:
+            # OR Vx, Vy
+            let res: int = bits.bit_or(buf.get(v, x), buf.get(v, y))
+            buf.set(v, x, res)
+            set_pc(state, pc + 2)
+            return rng_seed
+        if n == 2:
+            # AND Vx, Vy
+            let res: int = bits.bit_and(buf.get(v, x), buf.get(v, y))
+            buf.set(v, x, res)
+            set_pc(state, pc + 2)
+            return rng_seed
+        if n == 3:
+            # XOR Vx, Vy
+            let res: int = bits.bit_xor(buf.get(v, x), buf.get(v, y))
+            buf.set(v, x, res)
+            set_pc(state, pc + 2)
+            return rng_seed
+        if n == 4:
+            # ADD Vx, Vy
+            let sum: int = buf.get(v, x) + buf.get(v, y)
+            if sum > 255:
+                buf.set(v, 15, 1)
+            else:
+                buf.set(v, 15, 0)
+            buf.set(v, x, sum % 256)
+            set_pc(state, pc + 2)
+            return rng_seed
+        if n == 5:
+            # SUB Vx, Vy
+            let vx: int = buf.get(v, x)
+            let vy: int = buf.get(v, y)
+            if vx >= vy:
+                buf.set(v, 15, 1)
+            else:
+                buf.set(v, 15, 0)
+            buf.set(v, x, (vx - vy + 256) % 256)
+            set_pc(state, pc + 2)
+            return rng_seed
+        if n == 6:
+            # SHR Vx
+            let vx: int = buf.get(v, x)
+            buf.set(v, 15, vx % 2)
+            buf.set(v, x, vx / 2)
+            set_pc(state, pc + 2)
+            return rng_seed
+        if n == 7:
+            # SUBN Vx, Vy
+            let vx: int = buf.get(v, x)
+            let vy: int = buf.get(v, y)
+            if vy >= vx:
+                buf.set(v, 15, 1)
+            else:
+                buf.set(v, 15, 0)
+            buf.set(v, x, (vy - vx + 256) % 256)
+            set_pc(state, pc + 2)
+            return rng_seed
+        if n == 14:
+            # SHL Vx
+            let vx: int = buf.get(v, x)
+            buf.set(v, 15, (vx / 128) % 2)
+            buf.set(v, x, (vx * 2) % 256)
+            set_pc(state, pc + 2)
+            return rng_seed
+
+        set_pc(state, pc + 2)
+        return rng_seed
+
+    # 9XY0: SNE Vx, Vy
+    if opt == 9:
+        if buf.get(v, x) != buf.get(v, y):
+            set_pc(state, pc + 4)
+        else:
+            set_pc(state, pc + 2)
+        return rng_seed
+
+    # ANNN: LD I, addr
+    if opt == 10:
+        set_i(state, nnn)
+        set_pc(state, pc + 2)
+        return rng_seed
+
+    # BNNN: JP V0, addr
+    if opt == 11:
+        let v0: int = buf.get(v, 0)
+        set_pc(state, nnn + v0)
+        return rng_seed
+
+    # CXNN: RND Vx, byte
+    if opt == 12:
+        let next_seed: int = next_random(rng_seed)
+        let rnd_byte: int = (next_seed / 65536) % 256
+        buf.set(v, x, bits.bit_and(rnd_byte, nn))
+        set_pc(state, pc + 2)
+        return next_seed
+
+    # DXYN: DRW Vx, Vy, nibble
+    if opt == 13:
+        let vx: int = buf.get(v, x) % 64
+        let vy: int = buf.get(v, y) % 32
+        let i_addr: int = get_i(state)
+        buf.set(v, 15, 0)
+        let row: int = 0
+        while row < n:
+            let sprite_byte: int = buf.get(mem, i_addr + row)
+            let col: int = 0
+            while col < 8:
+                let sprite_bit: int = bits.get_bit(sprite_byte, 7 - col)
+                if sprite_bit == 1:
+                    let px: int = (vx + col) % 64
+                    let py: int = (vy + row) % 32
+                    let current: int = display.get_pixel(gfx, px, py)
+                    if current == 1:
+                        buf.set(v, 15, 1)
+                        display.set_pixel(gfx, px, py, 0)
+                    else:
+                        display.set_pixel(gfx, px, py, 1)
+                col = col + 1
+            row = row + 1
+        set_draw_flag(state, 1)
+        set_pc(state, pc + 2)
+        return rng_seed
+
+    # EX9E / EXA1: Key checks
+    if opt == 14:
+        let key_val: int = buf.get(v, x)
+        if nn == 0x9E:
+            if keypad.is_key_down(keys, key_val) == 1:
+                set_pc(state, pc + 4)
+            else:
+                set_pc(state, pc + 2)
+            return rng_seed
+        if nn == 0xA1:
+            if keypad.is_key_down(keys, key_val) == 0:
+                set_pc(state, pc + 4)
+            else:
+                set_pc(state, pc + 2)
+            return rng_seed
+        set_pc(state, pc + 2)
+        return rng_seed
+
+    # FX__: Timers, BCD, Reg dump/load
+    if opt == 15:
+        if nn == 0x07:
+            # LD Vx, DT
+            buf.set(v, x, get_dt(state))
+            set_pc(state, pc + 2)
+            return rng_seed
+        if nn == 0x0A:
+            # LD Vx, K
+            let k: int = 0
+            let pressed: int = 0 - 1
+            while k < 16:
+                if keypad.is_key_down(keys, k) == 1:
+                    pressed = k
+                k = k + 1
+            if pressed >= 0:
+                buf.set(v, x, pressed)
+                set_pc(state, pc + 2)
+            return rng_seed
+        if nn == 0x15:
+            # LD DT, Vx
+            set_dt(state, buf.get(v, x))
+            set_pc(state, pc + 2)
+            return rng_seed
+        if nn == 0x18:
+            # LD ST, Vx
+            set_st(state, buf.get(v, x))
+            set_pc(state, pc + 2)
+            return rng_seed
+        if nn == 0x1E:
+            # ADD I, Vx
+            let curr_i: int = get_i(state)
+            set_i(state, (curr_i + buf.get(v, x)) % 65536)
+            set_pc(state, pc + 2)
+            return rng_seed
+        if nn == 0x29:
+            # LD F, Vx
+            let char_code: int = buf.get(v, x) % 16
+            set_i(state, 0x050 + char_code * 5)
+            set_pc(state, pc + 2)
+            return rng_seed
+        if nn == 0x33:
+            # LD B, Vx
+            let val: int = buf.get(v, x)
+            let curr_i: int = get_i(state)
+            buf.set(mem, curr_i, val / 100)
+            buf.set(mem, curr_i + 1, (val / 10) % 10)
+            buf.set(mem, curr_i + 2, val % 10)
+            set_pc(state, pc + 2)
+            return rng_seed
+        if nn == 0x55:
+            # LD [I], Vx
+            let curr_i: int = get_i(state)
+            let idx: int = 0
+            while idx <= x:
+                buf.set(mem, curr_i + idx, buf.get(v, idx))
+                idx = idx + 1
+            set_pc(state, pc + 2)
+            return rng_seed
+        if nn == 0x65:
+            # LD Vx, [I]
+            let curr_i: int = get_i(state)
+            let idx: int = 0
+            while idx <= x:
+                buf.set(v, idx, buf.get(mem, curr_i + idx))
+                idx = idx + 1
+            set_pc(state, pc + 2)
+            return rng_seed
+
+        set_pc(state, pc + 2)
+        return rng_seed
+
+    set_pc(state, pc + 2)
+    return rng_seed
+
+pub fn tick_timers(state: buffer) -> int:
+    let dt: int = get_dt(state)
+    if dt > 0:
+        set_dt(state, dt - 1)
+    let st: int = get_st(state)
+    if st > 0:
+        set_st(state, st - 1)
+    return 0

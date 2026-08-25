@@ -1,0 +1,132 @@
+pub fn bit_and(a: int, b: int) -> int:
+    let res: int = 0
+    let pow: int = 1
+    let x: int = a
+    let y: int = b
+    let i: int = 0
+    while i < 8:
+        let bx: int = x % 2
+        let by: int = y % 2
+        if bx == 1:
+            if by == 1:
+                res = res + pow
+        x = x / 2
+        y = y / 2
+        pow = pow * 2
+        i = i + 1
+    return res
+
+pub fn bit_or(a: int, b: int) -> int:
+    let res: int = 0
+    let pow: int = 1
+    let x: int = a
+    let y: int = b
+    let i: int = 0
+    while i < 8:
+        let bx: int = x % 2
+        let by: int = y % 2
+        if bx == 1:
+            res = res + pow
+        else:
+            if by == 1:
+                res = res + pow
+        x = x / 2
+        y = y / 2
+        pow = pow * 2
+        i = i + 1
+    return res
+
+pub fn bit_xor(a: int, b: int) -> int:
+    let res: int = 0
+    let pow: int = 1
+    let x: int = a
+    let y: int = b
+    let i: int = 0
+    while i < 8:
+        let bx: int = x % 2
+        let by: int = y % 2
+        if bx != by:
+            res = res + pow
+        x = x / 2
+        y = y / 2
+        pow = pow * 2
+        i = i + 1
+    return res
+
+pub fn get_bit(val_in: int, bit_index: int) -> int:
+    let v_bit: int = val_in
+    let bit_i: int = 0
+    while bit_i < bit_index:
+        v_bit = v_bit / 2
+        bit_i = bit_i + 1
+    return v_bit % 2
+
+pub fn op_type(op_in: int) -> int:
+    return op_in / 4096
+
+pub fn reg_x(op_in: int) -> int:
+    return (op_in / 256) % 16
+
+pub fn reg_y(op_in: int) -> int:
+    return (op_in / 16) % 16
+
+pub fn nibble_n(op_in: int) -> int:
+    return op_in % 16
+
+pub fn byte_nn(op_in: int) -> int:
+    return op_in % 256
+
+pub fn addr_nnn(op_in: int) -> int:
+    return op_in % 4096
+
+pub fn hex_nibble(nib_in: int) -> str:
+    let nib: int = nib_in % 16
+    if nib == 0:
+        return "0"
+    if nib == 1:
+        return "1"
+    if nib == 2:
+        return "2"
+    if nib == 3:
+        return "3"
+    if nib == 4:
+        return "4"
+    if nib == 5:
+        return "5"
+    if nib == 6:
+        return "6"
+    if nib == 7:
+        return "7"
+    if nib == 8:
+        return "8"
+    if nib == 9:
+        return "9"
+    if nib == 10:
+        return "A"
+    if nib == 11:
+        return "B"
+    if nib == 12:
+        return "C"
+    if nib == 13:
+        return "D"
+    if nib == 14:
+        return "E"
+    if nib == 15:
+        return "F"
+    return "0"
+
+pub fn hex_u8(val8: int) -> str:
+    let bval: int = val8 % 256
+    let hi_str: str = hex_nibble(bval / 16)
+    let lo_str: str = hex_nibble(bval % 16)
+    return hi_str + lo_str
+
+pub fn hex_u16(val16: int) -> str:
+    let wval: int = val16 % 65536
+    let n0_str: str = hex_nibble(wval / 4096)
+    let n1_str: str = hex_nibble((wval / 256) % 16)
+    let n2_str: str = hex_nibble((wval / 16) % 16)
+    let n3_str: str = hex_nibble(wval % 16)
+    let p1_str: str = n0_str + n1_str
+    let p2_str: str = n2_str + n3_str
+    return p1_str + p2_str
