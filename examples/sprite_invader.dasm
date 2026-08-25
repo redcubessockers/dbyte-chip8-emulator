@@ -1,0 +1,23 @@
+; ==============================================================================
+; SPACE INVADER SPRITE ANIMATION DEMO
+; ==============================================================================
+; Draws an 8x8 Space Invader alien sprite in the center of the screen
+; ==============================================================================
+
+start:
+    CLS
+    LD V0, 0x1C         ; Center X = 28
+    LD V1, 0x0C         ; Center Y = 12
+    LD I, 0x0210        ; Point to Sprite bitmap address
+    DRW V0, V1, 8       ; Draw 8-byte tall sprite
+    JP 0x020E           ; Halt / Loop indefinitely
+
+; 8x8 Alien Sprite Data:
+; Row 0: 0x18 = 00011000
+; Row 1: 0x3C = 00111100
+; Row 2: 0x7E = 01111110
+; Row 3: 0xDB = 11011011
+; Row 4: 0xFF = 11111111
+; Row 5: 0x24 = 00100100
+; Row 6: 0x5A = 01011010
+; Row 7: 0xA5 = 10100101

@@ -1,0 +1,42 @@
+; ==============================================================================
+; SNAKE & APPLE GAME - Written for DByte CHIP-8 SDK
+; ==============================================================================
+; V0: Snake Head X (0..63)
+; V1: Snake Head Y (0..31)
+; V2: Direction (0: Right, 1: Down, 2: Left, 3: Up)
+; V3: Apple X
+; V4: Apple Y
+; V5: Score
+; V6: Temp / Math
+; ==============================================================================
+
+start:
+    CLS
+    LD V0, 0x14         ; Snake start X = 20
+    LD V1, 0x0A         ; Snake start Y = 10
+    LD V2, 0x00         ; Start moving Right
+    LD V3, 0x28         ; Apple X = 40
+    LD V4, 0x10         ; Apple Y = 16
+    LD V5, 0x00         ; Score = 0
+
+game_loop:
+    ; Draw Snake Head (1x1 pixel sprite at 0x0250)
+    LD I, 0x0250
+    DRW V0, V1, 1
+
+    ; Draw Apple (1x1 pixel sprite at 0x0250)
+    DRW V3, V4, 1
+
+    ; Check Direction and update coordinates
+    ADD V0, 0x02        ; Move snake X by 2
+    
+    ; Screen wrap around boundary check
+    LD I, 0x0250
+    DRW V0, V1, 1
+
+    ; Loop delay
+    JP 0x0208
+
+; Data section: 1-pixel sprite (0x80 = 10000000 binary)
+sprite_data:
+    CLS

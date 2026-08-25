@@ -1,0 +1,8 @@
+; CHIP-8 Assembly Sample Program
+; Draws a square on screen and loops
+CLS
+LD V0, 0x14
+LD V1, 0x0A
+LD I, 0x0210
+DRW V0, V1, 4
+JP 0x0208

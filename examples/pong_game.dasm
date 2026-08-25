@@ -1,0 +1,35 @@
+; ==============================================================================
+; PONG GAME - 2-Player Retro Table Tennis in CHIP-8 Assembly
+; ==============================================================================
+; V0: Left Paddle Y (0..26)
+; V1: Right Paddle Y (0..26)
+; V2: Ball X (0..62)
+; V3: Ball Y (0..30)
+; V4: Ball Vel X
+; V5: Ball Vel Y
+; ==============================================================================
+
+init:
+    CLS
+    LD V0, 0x0C         ; Left paddle Y = 12
+    LD V1, 0x0C         ; Right paddle Y = 12
+    LD V2, 0x20         ; Ball X = 32
+    LD V3, 0x10         ; Ball Y = 16
+    LD V4, 0x01         ; Ball Vel X = +1
+    LD V5, 0x01         ; Ball Vel Y = +1
+
+main_loop:
+    ; Draw Left Paddle (x=2, y=V0, height=6)
+    LD I, 0x0250
+    DRW V0, V0, 6
+
+    ; Draw Ball (x=V2, y=V3, height=1)
+    LD I, 0x0260
+    DRW V2, V3, 1
+
+    ; Move Ball
+    ADD V2, 0x01
+    ADD V3, 0x01
+
+    ; Loop back
+    JP 0x020E
