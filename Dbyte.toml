@@ -1,0 +1,10 @@
+[package]
+name = "dbyte-chip8-emulator"
+version = "1.0.0"
+description = "CHIP-8 Virtual Machine, Two-Pass Assembler, High-Level C-Script Compiler, Step Tracer & Static Binary Analyzer"
+authors = ["redcubessockers"]
+license = "MIT"
+repository = "https://github.com/redcubessockers/dbyte-chip8-emulator"
+homepage = "https://github.com/redcubessockers/dbyte-chip8-emulator"
+
+[dependencies]

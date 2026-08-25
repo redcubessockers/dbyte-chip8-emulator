@@ -1,0 +1,15 @@
+# DByte & Build Artifacts
+*.lock
+*.log
+*.tmp
+*.o
+*.bin
+*.elf
+.cache/
+.vscode/
+.idea/
+tmp/
+scratch/
+test_out.ch8
+flappy_mod.ch8
+*~
